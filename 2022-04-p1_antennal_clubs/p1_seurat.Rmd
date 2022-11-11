@@ -1,0 +1,1084 @@
+---
+title: "p1_seurat"
+author: "Anindita Brahma"
+date: "28/04/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+if (!requireNamespace("BiocManager", quietly = TRUE)) {
+  install.packages("BiocManager")
+}
+libraries <- c("dplyr", "Seurat",
+               "patchwork")
+for (lib in libraries) {
+  if (require(package = lib, character.only = TRUE)) {
+    message("Library loaded: ", lib)
+  } else {
+    print("Installing")
+    BiocManager::install(lib, Ncpus = 10, update = TRUE)
+    library(lib, character.only = TRUE)
+    message("Library loaded: ", lib)
+  }
+}
+sessionInfo()
+for (package in (.packages())) {
+  print(paste("Package", package, "version", packageVersion(package)))
+}
+```
+
+##2022-04-28
+##Using Seurat on cellranger data after count step
+##Useful link: https://satijalab.org/seurat/articles/pbmc3k_tutorial.html
+
+```{r}
+#import cellranger count matrix data
+p1_data <- Read10X(data.dir = "input/cellranger_matrix/filtered_feature_bc_matrix/")
+
+# Initialize the Seurat object with the raw (non-normalized data)
+p1_seurat <- CreateSeuratObject(counts = p1_data, project = "p1_antennal_clubs",
+                                min.cells = 3, min.features = 200)
+p1_seurat
+
+p1_data[c("ObirOr5-Orco", "ObirOr5-9E109", "ObirOr5-9E121"), 1:30]
+
+p1_dense_size <- object.size(as.matrix(x = p1_data))
+p1_dense_size
+
+p1_sparse_size <- object.size(p1_data)
+p1_sparse_size
+
+p1_dense_size/p1_sparse_size
+
+##QC filtering
+
+#mitochondrial contamination
+
+p1_seurat[["percent.mt"]] <- PercentageFeatureSet(object = p1_seurat,
+                                                  pattern = "^MT-")
+# grep( "^mt-", rownames(p1_seurat), value = T)
+
+#Show QC metrics for the first 5 cells
+head(p1_seurat@meta.data, 5)
+
+##visualize QC metrics as a violin plot
+VlnPlot(object = p1_seurat, features = c("nFeature_RNA", "nCount_RNA"),
+        ncol = 3)
+
+# FeatureScatter is typically used to visualize feature-feature relationships, but can be used
+# for anything calculated by the object, i.e. columns in object metadata, PC scores etc.
+
+#nFeature_RNA = number of genes detected in each cell
+#nCount_RNA = total number of molecules detected within a cell
+
+
+plot1 <- FeatureScatter(object = p1_seurat, feature1 = "nCount_RNA",
+                        feature2 = "nFeature_RNA")
+plot1
+
+#filtering seurat object for low and very high feature counts
+p1_seurat <- subset(x = p1_seurat,
+                           subset = nFeature_RNA > 200 &
+                             nFeature_RNA < 5000)
+
+
+# rm(p1_seurat_subset) #to reduce clutter
+
+##normalizing the data
+p1_normalize <- NormalizeData(object = p1_seurat,
+                                     normalization.method = "LogNormalize",
+                                     scale.factor = 10000)
+
+#identifying highly variable feautures
+p1_subset_vf <- FindVariableFeatures(object = p1_normalize,
+                                     selection.method = "vst",
+                                     nfeatures = 5000)
+
+# Identify the 10 most highly variable genes
+p1_vf_top10 <- head(VariableFeatures(object = p1_subset_vf), 10)
+
+# plot variable features with and without labels
+plot1_vf <- VariableFeaturePlot(object = p1_subset_vf)
+plot2_vf <- LabelPoints(plot = plot1_vf,
+                        points = p1_vf_top10)
+plot1_vf + plot2_vf
+
+##plot normalized gene counts
+log_normal_gene_count <- as.vector(x = p1_subset_vf[['RNA']]@data)
+log_normal_gene_count <- log_normal_gene_count[log_normal_gene_count != 0]
+hist(log_normal_gene_count)
+
+#scaling the data : linear transformation
+##The results of this are stored in pbmc[["RNA"]]@scale.data
+
+all_genes <- rownames(p1_subset_vf)
+
+p1_subset_vf_scale <- ScaleData(object = p1_subset_vf,
+                                features = all_genes)
+
+#perform linear dimensional reduction
+p1_scale_pca <- RunPCA(object = p1_subset_vf_scale,
+                       features = VariableFeatures(object = p1_subset_vf_scale))
+
+# Examine and visualize PCA results a few different ways
+print(p1_scale_pca[["pca"]], dims = 1:5, nfeatures = 5)
+
+VizDimLoadings(object = p1_scale_pca, dims = 1:2, reduction = "pca")
+
+DimPlot(object = p1_scale_pca, reduction = "pca")
+
+DimHeatmap(object = p1_scale_pca, dims = 1, cells = 5000,
+           balanced = TRUE)
+
+DimHeatmap(object = p1_scale_pca, dims = 1:15, cells = 500,
+           balanced = TRUE)
+
+##cluster the cells
+p1_scale <- FindNeighbors(object = p1_scale_pca, dims = 1:10)
+p1_scale <- FindClusters(object = p1_scale, resolution = 0.5)
+
+##run UMAP/tSNE
+p1_scale <- RunTSNE(object = p1_scale, dims = 1:10)
+DimPlot(object = p1_scale, reduction = "tsne")
+
+FeaturePlot(p1_scale, features = c("LOC105284919", "LOC105276401", "LOC105285306",
+                                   "LOC105275115", "LOC105280759", "LOC105286785"),
+            reduction = "tsne")
+FeaturePlot(p1_scale, features = "ObirOr5-Orco", reduction = "tsne")
+
+##save the UMAP as .rds file
+
+saveRDS(object = p1_scale, file = "results/p1_scale.rds")
+
+#find markers
+#cluster 2
+cluster1_markers <- FindMarkers(object = p1_scale, ident.1 = 1,
+                                min.pct = 0.25)
+head(cluster1_markers, n = 10)
+
+#cluster 0
+cluster0_markers <- FindMarkers(object = p1_scale, ident.1 = 0,
+                                min.pct = 0.25)
+head(cluster0_markers, n = 10)
+
+```
+
+```{r}
+##get nuclei expressing specific genes
+
+##neuronal markers
+#synaptobrevin
+nsyb <- GetAssayData(object = p1_normalize,
+                     assay = "RNA", slot = "data")["LOC105284919", ]
+head(nsyb, 10)
+
+#here nuclei identities are rownames; convert that into a column
+nsyb_df <- data.frame(nsyb)
+nsyb_nuclei_id <- rownames(nsyb_df)
+rownames(nsyb_df) <- NULL
+
+nsyb_df <- cbind(nsyb_nuclei_id, nsyb_df)
+colnames(nsyb_df) <- c("nuclei_id_nsyb", "nsyb_count")
+
+nsyb_subset <- subset(x = nsyb_df, subset = nsyb_count > 2)
+
+##embryonic lethal abnormal vision
+elav <- GetAssayData(object = p1_normalize,
+                     assay = "RNA", slot = "data")["LOC105280759", ]
+elav_df <- data.frame(elav)
+elav_nuclei_id <- rownames(elav_df)
+rownames(elav_df) <- NULL
+
+elav_df <- cbind(elav_nuclei_id, elav_df)
+colnames(elav_df) <- c("nuclei_id_elav", "elav_count")
+elav_subset <- subset(x = elav_df, subset = elav_count > 2)
+
+##brunchpilot
+brp <- GetAssayData(object = p1_normalize,
+                     assay = "RNA", slot = "data")["LOC105276401", ]
+brp_df <- data.frame(brp)
+brp_nuclei_id <- rownames(brp_df)
+rownames(brp_df) <- NULL
+
+brp_df <- cbind(brp_nuclei_id, brp_df)
+colnames(brp_df) <- c("nuclei_id_brp", "brp_count")
+brp_subset <- subset(x = brp_df, subset = brp_count > 2)
+
+##cadherin N
+cadn <- GetAssayData(object = p1_normalize,
+                     assay = "RNA", slot = "data")["LOC105285306", ]
+cadn_df <- data.frame(cadn)
+cadn_nuclei_id <- rownames(cadn_df)
+rownames(cadn_df) <- NULL
+
+cadn_df <- cbind(cadn_nuclei_id, cadn_df)
+colnames(cadn_df) <- c("nuclei_id_cadn", "cadn_count")
+cadn_subset <- subset(x = cadn_df, subset = cadn_count > 2)
+
+##synaptotagmin
+syt1 <- GetAssayData(object = p1_normalize,
+                     assay = "RNA", slot = "data")["LOC105275115", ]
+syt1_df <- data.frame(syt1)
+syt1_nuclei_id <- rownames(syt1_df)
+rownames(syt1_df) <- NULL
+
+syt1_df <- cbind(syt1_nuclei_id, syt1_df)
+colnames(syt1_df) <- c("nuclei_id_syt1", "syt1_count")
+syt1_subset <- subset(x = syt1_df, subset = syt1_count > 2)
+
+##glial marker
+#reverse polarity
+repo <- GetAssayData(object = p1_normalize,
+                     assay = "RNA", slot = "data")["LOC105286785", ]
+repo_df <- data.frame(repo)
+repo_nuclei_id <- rownames(repo_df)
+rownames(repo_df) <- NULL
+
+repo_df <- cbind(repo_nuclei_id, repo_df)
+colnames(repo_df) <- c("nuclei_id_repo", "repo_count")
+repo_subset <- subset(x = repo_df, subset = repo_count > 2)
+
+##nsyb and elav
+nsyb_elav <- data.frame(intersect(nsyb_subset$nuclei_id_nsyb, elav_subset$nuclei_id_elav))
+colnames(nsyb_elav) <- "nysb_elav_nuclei_ids"
+
+##nysb and brp
+nsyb_brp <- data.frame(intersect(nsyb_subset$nuclei_id_nsyb, brp_subset$nuclei_id_brp))
+colnames(nsyb_brp) <- "nysb_brp_nuclei_ids"
+
+##nsyb and cadn
+nsyb_cadn <- data.frame(intersect(nsyb_subset$nuclei_id_nsyb, cadn_subset$nuclei_id_cadn))
+colnames(nsyb_cadn) <- "nysb_cadn_nuclei_ids"
+
+##nsyb and syt1
+nsyb_syt1 <- data.frame(intersect(nsyb_subset$nuclei_id_nsyb, syt1_subset$nuclei_id_syt1))
+colnames(nsyb_syt1) <- "nysb_syt1_nuclei_ids"
+
+##elav and brp
+elav_brp <- data.frame(intersect(elav_subset$nuclei_id_elav, brp_subset$nuclei_id_brp))
+colnames(elav_brp) <- "elav_brp_nuclei_ids"
+
+##elav and cadn
+elav_cadn <- data.frame(intersect(elav_subset$nuclei_id_elav, cadn_subset$nuclei_id_cadn))
+colnames(elav_cadn) <- "elav_cadn_nuclei_ids"
+
+##elav and syt1
+elav_syt1 <- data.frame(intersect(elav_subset$nuclei_id_elav, syt1_subset$nuclei_id_syt1))
+colnames(elav_syt1) <- "elav_syt1_nuclei_ids"
+
+##brp and cadn
+brp_cadn <- data.frame(intersect(brp_subset$nuclei_id_brp, cadn_subset$nuclei_id_cadn))
+colnames(brp_cadn) <- "brp_cadn_nuclei_ids"
+
+##brp and syt1
+brp_syt1 <- data.frame(intersect(brp_subset$nuclei_id_brp, syt1_subset$nuclei_id_syt1))
+colnames(brp_syt1) <- "brp_syt1_nuclei_ids"
+
+##cadn and syt1
+cadn_syt1 <- data.frame(intersect(cadn_subset$nuclei_id_cadn, syt1_subset$nuclei_id_syt1))
+colnames(cadn_syt1) <- "cadn_syt1_nuclei_ids"
+
+neuronal_uniq_ids <- data.frame(unique(c(nsyb_elav$nysb_elav_nuclei_ids, nsyb_brp$nysb_brp_nuclei_ids,
+                              nsyb_cadn$nysb_cadn_nuclei_ids, nsyb_syt1$nysb_syt1_nuclei_ids,
+                              elav_brp$elav_brp_nuclei_ids, elav_cadn$elav_cadn_nuclei_ids,
+                              elav_syt1$elav_syt1_nuclei_ids, brp_cadn$brp_cadn_nuclei_ids,
+                              brp_syt1$brp_syt1_nuclei_ids, cadn_syt1$cadn_syt1_nuclei_ids)))
+
+colnames(neuronal_uniq_ids) <- "neuronal_uniq_ids"
+
+##subset the normalized seurat object for the barcodes with at least two neuronal markers
+
+p1_normalize_neuron_ids <- subset(x = p1_normalize,
+                                  cells = neuronal_uniq_ids$neuronal_uniq_ids)
+length(colnames(p1_normalize_neuron_ids)) ##34667
+length(rownames(p1_normalize_neuron_ids)) ##13675
+
+#find the highly variable genes in this subset
+p1_normalize_neuron_ids <- FindVariableFeatures(object = p1_normalize_neuron_ids,
+                                  selection.method = "vst",
+                                  nfeatures = 2000)
+#identify the top most variable genes
+top20_neuron_genes <- head(VariableFeatures(object = p1_normalize_neuron_ids), 20)
+plot1 <- VariableFeaturePlot(p1_normalize_neuron_ids)
+plot2 <- LabelPoints(plot = plot1, points = top20_neuron_genes, repel = TRUE)
+plot1 + plot2
+
+##scaling the data
+all_genes_neurons <- rownames(p1_normalize_neuron_ids)
+p1_normalize_neuron_ids <- ScaleData(object = p1_normalize_neuron_ids,
+                                     features = all_genes_neurons)
+
+p1_normalize_neuron_ids <- RunPCA(object = p1_normalize_neuron_ids,
+                             features = VariableFeatures(object = p1_normalize_neuron_ids))
+
+DimHeatmap(p1_normalize_neuron_ids, dims = 1:15, cells = 500, balanced = TRUE)
+
+##cluster the nuclei
+
+p1_normalize_neuron_ids <- FindNeighbors(object = p1_normalize_neuron_ids,
+                                         dims = 1:10)
+p1_normalize_neuron_ids <- FindClusters(object = p1_normalize_neuron_ids,
+                                        resolution = 0.5)
+
+##non-linear dimension reduction
+
+p1_normalize_neuron_ids <- RunTSNE(object = p1_normalize_neuron_ids,
+                                   dims = 1:10)
+DimPlot(object = p1_normalize_neuron_ids, reduction = "tsne")
+
+FeaturePlot(object = p1_normalize_neuron_ids,
+            features = c("ObirOr5-Orco", "ObirOr5-U22",
+                                                 "ObirOr5-U61", "ObirOr5-V23",
+                                                 "ObirOr5-V18", "ObirOr5-V24",
+                                                 "ObirOr5-V21", "ObirOr5-V15"))
+
+FeaturePlot(p1_normalize_neuron_ids, features = c("LOC105284919", "LOC105276401", "LOC105285306",
+                                   "LOC105275115", "LOC105280759", "ObirOr5-Orco"),
+            reduction = "tsne")
+
+
+# write.table(x = p1_normalize_neuron_ids@assays[["RNA"]]@counts,
+#             file = "results/gene_count_per_nuclei.csv", quote = FALSE,
+#             sep = ",", col.names = TRUE)
+
+#cluster markers
+#find markers
+#cluster 1
+cluster1_markers <- FindMarkers(object = p1_normalize_neuron_ids, ident.1 = 1,
+                                min.pct = 0.25)
+head(cluster1_markers, n = 10)
+
+gene_count_per_nuclei <- data.frame(p1_normalize_neuron_ids@assays[["RNA"]]@counts)
+
+gene_id <- rownames(gene_count_per_nuclei)
+
+gene_count_per_nuclei$gene_id <- gene_id
+rownames(gene_count_per_nuclei) <- NULL
+
+gene_count_per_nuclei$gene_id <- as.factor(gene_count_per_nuclei$gene_id)
+str(gene_count_per_nuclei$gene_id)
+
+or_per_nucleus <- subset(x = gene_count_per_nuclei,
+                         subset = gene_id == list(or_genes)) 
+
+
+or_per_nucleus <- merge(x = gene_count_per_nuclei, y = or_genes)
+
+##calculate number of ORs per nuclei with count > 2
+#transpose the data such that gene ids are now the columns
+or_per_nucleus_t <- data.frame(t(or_per_nucleus[, -1]))
+colnames(or_per_nucleus_t) <- or_per_nucleus$gene_id
+nuclei_barcodes <- rownames(or_per_nucleus_t)
+rownames(or_per_nucleus_t) <- NULL
+# or_per_nucleus_t$nuclei_barcodes <- as.factor(nuclei_barcodes)
+
+##create a vector with unique nucleus barcodes (there shouldn't be duplication though)
+nuclei_barcode_vec <- unique(nuclei_barcodes)
+
+#create empty dataframe
+result_df <- as.data.frame(matrix(ncol = 3,
+                                  nrow = length(nuclei_barcode_vec)))
+colnames(result_df) <- c("nucleus_barcode", "false", "true")
+
+result_df$nucleus_barcode <- nuclei_barcode_vec
+
+for (position in seq_len(length(nuclei_barcode_vec))) {
+  print(position)
+  table <- data.frame(table(or_per_nucleus_t[position, ] > 1))
+  table_t <- data.frame(t(table))
+  
+  if (colnames(table_t) == "t.table.") {
+    result_df$false[position] <- 563
+    result_df$true[position] <- 0
+  }
+  
+  if (colnames(table_t)[1] == "X1") {
+    colnames(table_t) <- c("false", "true")
+  table_t <- table_t[-1, ]
+  result_df$false[position] <- table_t$false
+  result_df$true[position] <- table_t$true
+  }
+  
+
+} 
+##true column in this table represents number of ORs with count > 1
+
+# #save table
+# write.table(x = result_df, file = "results/or_per_nucleus.csv",
+#             sep = ",", quote = FALSE, row.names = FALSE)
+
+#remove rownames
+rownames(result_df) <- NULL
+
+#remove whitespace from the column true
+result_df_copy <- data.frame(gsub(pattern = " ", replacement = "",
+                       x = result_df$true))
+colnames(result_df_copy) <- "true_or"
+str(result_df_copy$true_or)
+#change from character to numeric
+result_df_copy$true_or <- as.numeric(result_df_copy$true_or)
+
+#add this into the original result_df dataframe
+result_df$true_or <- gsub(pattern = " ", replacement = "", x = result_df$true)
+str(result_df)
+result_df$true_or <- as.numeric(result_df$true_or)
+
+
+
+##subset the nuclei for which there is 1 OR with read count > 1
+only_one_or <- subset(x = result_df, subset = true_or == 1) #9764
+
+##subset the nuclei for which there are more than 1 ORs with read count > 1
+more_than_one_or <- subset(x = result_df, subset = true_or > 1) #16473
+
+#subset the nuclei for which there are more than or = 2 and less than 4 ORs with read count > 1
+more_than_two_ors <- subset(x = result_df, subset = true_or >= 2 &
+                              true_or < 4) #7939
+
+#subset for more than 4 ORs
+more_than_four_ors <- more_than_one_or <- subset(x = result_df, subset = true_or > 4) #6451
+
+#subset for nuclei with no ORs with read count > 1
+no_or <- subset(x = result_df, subset = true_or == 0) #8341
+
+#make a freq distribution
+categories <- c("no_OR", "only_1_OR", "two_or_more_ORs", "more_than_four_ORs")
+values <- c(8341, 9764, 7939, 6451)
+
+hist_df <- data.frame(categories, values)
+hist_df_t <- data.frame(t(hist_df))
+
+barplot(hist_df$values)
+
+
+
+
+
+# col_sums <- colSums(or_per_nucleus[, 2:10000])
+# hist(col_sums)
+# colSums(or_per_nucleus[, 2, drop = FALSE])
+# 
+# a <- c(0, 2, 0, 3, 0, 4)
+# b <- c(0, 0, 0, 0, 2, 3)
+# c <- c(1, 0, 1, 0, 5, 0)
+# abc <- data.frame(rbind(a, b, c))
+# colnames(abc) <- c("g1", "g2", "g3", "g4", "g5", "g6")
+# 
+# table(abc[1, ] > 2)
+# res <- data.frame(table(abc[1:3, ] > 2))
+# 
+# names <- data.frame(c("a", "b", "c"))
+# colnames(names) <- "name"
+# 
+# names_vec <- unique(names$name)
+# res <- as.data.frame(matrix(ncol = 3,
+#                      nrow = length(names_vec)))
+# colnames(res) <- c("name", "false", "true")
+# res$name <- names_vec
+# 
+# for (position in seq_len(length(names_vec))) {
+#   print(position)
+#   table <- data.frame(table(abc[position, ] > 2))
+#   table_transpose <- data.frame(t(table))
+#   colnames(table_transpose) <- c("false", "true")
+#   table_transpose <- table_transpose[-1, ]
+#   res$false[position] <- table_transpose$false
+#   res$true[position] <- table_transpose$true
+# }
+# 
+# length(ab[ab > 2, ])
+# apply(ab, 2, function(x) sum(x > 1))
+
+
+
+
+
+```
+```{r}
+##list of OR genes
+or_genes <- c("ObirOr5-9E1",
+"ObirOr5-9E10",
+"ObirOr5-9E100",
+"ObirOr5-9E101",
+"ObirOr5-9E102",
+"ObirOr5-9E103",
+"ObirOr5-9E104",
+"ObirOr5-9E105PSE",
+"ObirOr5-9E106",
+"ObirOr5-9E107",
+"ObirOr5-9E108",
+"ObirOr5-9E109",
+"ObirOr5-9E11",
+"ObirOr5-9E110",
+"ObirOr5-9E111",
+"ObirOr5-9E112",
+"ObirOr5-9E113",
+"ObirOr5-9E114",
+"ObirOr5-9E115",
+"ObirOr5-9E116",
+"ObirOr5-9E117",
+"ObirOr5-9E118",
+"ObirOr5-9E119",
+"ObirOr5-9E12",
+"ObirOr5-9E120",
+"ObirOr5-9E121",
+"ObirOr5-9E122",
+"ObirOr5-9E123PSE",
+"ObirOr5-9E124",
+"ObirOr5-9E125",
+"ObirOr5-9E126",
+"ObirOr5-9E127",
+"ObirOr5-9E128",
+"ObirOr5-9E129",
+"ObirOr5-9E13",
+"ObirOr5-9E130PSE",
+"ObirOr5-9E131",
+"ObirOr5-9E132",
+"ObirOr5-9E133",
+"ObirOr5-9E134",
+"ObirOr5-9E135CTE",
+"ObirOr5-9E136",
+"ObirOr5-9E137",
+"ObirOr5-9E138",
+"ObirOr5-9E139",
+"ObirOr5-9E14",
+"ObirOr5-9E140",
+"ObirOr5-9E141",
+"ObirOr5-9E142PSE",
+"ObirOr5-9E143PSE",
+"ObirOr5-9E144PSE",
+"ObirOr5-9E145PSE",
+"ObirOr5-9E146PSE",
+"ObirOr5-9E147PSE",
+"ObirOr5-9E148",
+"ObirOr5-9E149PSE",
+"ObirOr5-9E15",
+"ObirOr5-9E150",
+"ObirOr5-9E151",
+"ObirOr5-9E152",
+"ObirOr5-9E153PSE",
+"ObirOr5-9E154",
+"ObirOr5-9E155",
+"ObirOr5-9E156",
+"ObirOr5-9E157",
+"ObirOr5-9E158",
+"ObirOr5-9E159",
+"ObirOr5-9E16",
+"ObirOr5-9E160",
+"ObirOr5-9E161",
+"ObirOr5-9E162",
+"ObirOr5-9E163PSE",
+"ObirOr5-9E164",
+"ObirOr5-9E165",
+"ObirOr5-9E166",
+"ObirOr5-9E167",
+"ObirOr5-9E168",
+"ObirOr5-9E169",
+"ObirOr5-9E17",
+"ObirOr5-9E170",
+"ObirOr5-9E171",
+"ObirOr5-9E172",
+"ObirOr5-9E173",
+"ObirOr5-9E174",
+"ObirOr5-9E175",
+"ObirOr5-9E176",
+"ObirOr5-9E177",
+"ObirOr5-9E178PSE",
+"ObirOr5-9E179",
+"ObirOr5-9E18",
+"ObirOr5-9E180",
+"ObirOr5-9E181",
+"ObirOr5-9E182",
+"ObirOr5-9E183PSE",
+"ObirOr5-9E184",
+"ObirOr5-9E185",
+"ObirOr5-9E186",
+"ObirOr5-9E187PSE",
+"ObirOr5-9E188",
+"ObirOr5-9E189",
+"ObirOr5-9E19",
+"ObirOr5-9E190",
+"ObirOr5-9E191",
+"ObirOr5-9E192",
+"ObirOr5-9E193",
+"ObirOr5-9E194",
+"ObirOr5-9E195",
+"ObirOr5-9E196",
+"ObirOr5-9E197",
+"ObirOr5-9E198",
+"ObirOr5-9E199PSE",
+"ObirOr5-9E20",
+"ObirOr5-9E200",
+"ObirOr5-9E201",
+"ObirOr5-9E202",
+"ObirOr5-9E203",
+"ObirOr5-9E204",
+"ObirOr5-9E205",
+"ObirOr5-9E206",
+"ObirOr5-9E207",
+"ObirOr5-9E208",
+"ObirOr5-9E209",
+"ObirOr5-9E21",
+"ObirOr5-9E210",
+"ObirOr5-9E211",
+"ObirOr5-9E212",
+"ObirOr5-9E213",
+"ObirOr5-9E214",
+"ObirOr5-9E215",
+"ObirOr5-9E216",
+"ObirOr5-9E217",
+"ObirOr5-9E218",
+"ObirOr5-9E219",
+"ObirOr5-9E22",
+"ObirOr5-9E220",
+"ObirOr5-9E221",
+"ObirOr5-9E222",
+"ObirOr5-9E223",
+"ObirOr5-9E224",
+"ObirOr5-9E225",
+"ObirOr5-9E226",
+"ObirOr5-9E227",
+"ObirOr5-9E228",
+"ObirOr5-9E229",
+"ObirOr5-9E23",
+"ObirOr5-9E230",
+"ObirOr5-9E231",
+"ObirOr5-9E232",
+"ObirOr5-9E233",
+"ObirOr5-9E234PSE",
+"ObirOr5-9E235PSE",
+"ObirOr5-9E236PSE",
+"ObirOr5-9E237PSE",
+"ObirOr5-9E238",
+"ObirOr5-9E239",
+"ObirOr5-9E240PSE",
+"ObirOr5-9E241",
+"ObirOr5-9E242",
+"ObirOr5-9E243",
+"ObirOr5-9E244",
+"ObirOr5-9E245",
+"ObirOr5-9E246",
+"ObirOr5-9E247",
+"ObirOr5-9E248",
+"ObirOr5-9E249",
+"ObirOr5-9E24PSE",
+"ObirOr5-9E25",
+"ObirOr5-9E250",
+"ObirOr5-9E251",
+"ObirOr5-9E252PSE",
+"ObirOr5-9E253PSE",
+"ObirOr5-9E254",
+"ObirOr5-9E255",
+"ObirOr5-9E256",
+"ObirOr5-9E257",
+"ObirOr5-9E258",
+"ObirOr5-9E259",
+"ObirOr5-9E26",
+"ObirOr5-9E260",
+"ObirOr5-9E261",
+"ObirOr5-9E262PSE",
+"ObirOr5-9E263",
+"ObirOr5-9E264PSE",
+"ObirOr5-9E265PSE",
+"ObirOr5-9E266PSE",
+"ObirOr5-9E267",
+"ObirOr5-9E268",
+"ObirOr5-9E269",
+"ObirOr5-9E27",
+"ObirOr5-9E270",
+"ObirOr5-9E271",
+"ObirOr5-9E272",
+"ObirOr5-9E273",
+"ObirOr5-9E274",
+"ObirOr5-9E275",
+"ObirOr5-9E276",
+"ObirOr5-9E277",
+"ObirOr5-9E278",
+"ObirOr5-9E279",
+"ObirOr5-9E28",
+"ObirOr5-9E280",
+"ObirOr5-9E281",
+"ObirOr5-9E282PSE",
+"ObirOr5-9E283",
+"ObirOr5-9E284",
+"ObirOr5-9E285",
+"ObirOr5-9E286",
+"ObirOr5-9E287",
+"ObirOr5-9E288",
+"ObirOr5-9E289",
+"ObirOr5-9E29",
+"ObirOr5-9E290",
+"ObirOr5-9E291",
+"ObirOr5-9E292",
+"ObirOr5-9E293",
+"ObirOr5-9E294",
+"ObirOr5-9E295",
+"ObirOr5-9E296",
+"ObirOr5-9E297",
+"ObirOr5-9E298",
+"ObirOr5-9E299",
+"ObirOr5-9E2PSE",
+"ObirOr5-9E30",
+"ObirOr5-9E300",
+"ObirOr5-9E301",
+"ObirOr5-9E302",
+"ObirOr5-9E303",
+"ObirOr5-9E304",
+"ObirOr5-9E305",
+"ObirOr5-9E306",
+"ObirOr5-9E307",
+"ObirOr5-9E308",
+"ObirOr5-9E309",
+"ObirOr5-9E31",
+"ObirOr5-9E310",
+"ObirOr5-9E311",
+"ObirOr5-9E312",
+"ObirOr5-9E313",
+"ObirOr5-9E314PSE",
+"ObirOr5-9E315",
+"ObirOr5-9E316",
+"ObirOr5-9E317",
+"ObirOr5-9E318",
+"ObirOr5-9E319",
+"ObirOr5-9E32",
+"ObirOr5-9E320",
+"ObirOr5-9E321",
+"ObirOr5-9E322",
+"ObirOr5-9E323",
+"ObirOr5-9E324",
+"ObirOr5-9E325",
+"ObirOr5-9E326",
+"ObirOr5-9E327",
+"ObirOr5-9E328",
+"ObirOr5-9E329",
+"ObirOr5-9E33",
+"ObirOr5-9E330",
+"ObirOr5-9E331",
+"ObirOr5-9E332",
+"ObirOr5-9E333",
+"ObirOr5-9E334",
+"ObirOr5-9E335",
+"ObirOr5-9E336",
+"ObirOr5-9E337",
+"ObirOr5-9E338",
+"ObirOr5-9E339",
+"ObirOr5-9E34",
+"ObirOr5-9E340",
+"ObirOr5-9E341PSE",
+"ObirOr5-9E342",
+"ObirOr5-9E343",
+"ObirOr5-9E344",
+"ObirOr5-9E345",
+"ObirOr5-9E346",
+"ObirOr5-9E347",
+"ObirOr5-9E348",
+"ObirOr5-9E349",
+"ObirOr5-9E35",
+"ObirOr5-9E350",
+"ObirOr5-9E351",
+"ObirOr5-9E352",
+"ObirOr5-9E353",
+"ObirOr5-9E354PSE",
+"ObirOr5-9E36",
+"ObirOr5-9E37",
+"ObirOr5-9E38",
+"ObirOr5-9E39PSE",
+"ObirOr5-9E3PSE",
+"ObirOr5-9E4",
+"ObirOr5-9E40PSE",
+"ObirOr5-9E41",
+"ObirOr5-9E42",
+"ObirOr5-9E43",
+"ObirOr5-9E44",
+"ObirOr5-9E45",
+"ObirOr5-9E46",
+"ObirOr5-9E47",
+"ObirOr5-9E48",
+"ObirOr5-9E49",
+"ObirOr5-9E5",
+"ObirOr5-9E50",
+"ObirOr5-9E51",
+"ObirOr5-9E52",
+"ObirOr5-9E53PSE",
+"ObirOr5-9E54",
+"ObirOr5-9E55",
+"ObirOr5-9E56",
+"ObirOr5-9E57",
+"ObirOr5-9E58",
+"ObirOr5-9E59",
+"ObirOr5-9E6",
+"ObirOr5-9E60",
+"ObirOr5-9E61",
+"ObirOr5-9E62",
+"ObirOr5-9E63PSE",
+"ObirOr5-9E64",
+"ObirOr5-9E65",
+"ObirOr5-9E66",
+"ObirOr5-9E67",
+"ObirOr5-9E68",
+"ObirOr5-9E69",
+"ObirOr5-9E7",
+"ObirOr5-9E70",
+"ObirOr5-9E71",
+"ObirOr5-9E72PSE",
+"ObirOr5-9E73",
+"ObirOr5-9E74",
+"ObirOr5-9E75",
+"ObirOr5-9E76",
+"ObirOr5-9E77",
+"ObirOr5-9E78",
+"ObirOr5-9E79",
+"ObirOr5-9E8",
+"ObirOr5-9E80",
+"ObirOr5-9E81",
+"ObirOr5-9E82",
+"ObirOr5-9E83",
+"ObirOr5-9E84",
+"ObirOr5-9E85",
+"ObirOr5-9E86",
+"ObirOr5-9E87",
+"ObirOr5-9E88",
+"ObirOr5-9E89",
+"ObirOr5-9E9",
+"ObirOr5-9E90",
+"ObirOr5-9E91",
+"ObirOr5-9E92",
+"ObirOr5-9E93",
+"ObirOr5-9E94",
+"ObirOr5-9E95",
+"ObirOr5-9E96",
+"ObirOr5-9E97",
+"ObirOr5-9E98",
+"ObirOr5-9E99",
+"ObirOr5-9Efrag1",
+"ObirOr5-9Efrag2",
+"ObirOr5-9Efrag3",
+"ObirOr5-A1",
+"ObirOr5-A2",
+"ObirOr5-A3",
+"ObirOr5-A4",
+"ObirOr5-A5",
+"ObirOr5-A6",
+"ObirOr5-A7",
+"ObirOr5-B1",
+"ObirOr5-C1",
+"ObirOr5-D1",
+"ObirOr5-D2",
+"ObirOr5-E10",
+"ObirOr5-E11",
+"ObirOr5-E12",
+"ObirOr5-E13",
+"ObirOr5-E14",
+"ObirOr5-E15",
+"ObirOr5-E16",
+"ObirOr5-E17",
+"ObirOr5-E18",
+"ObirOr5-E19",
+"ObirOr5-E1PSE",
+"ObirOr5-E20",
+"ObirOr5-E21",
+"ObirOr5-E22",
+"ObirOr5-E23",
+"ObirOr5-E24",
+"ObirOr5-E25",
+"ObirOr5-E26",
+"ObirOr5-E2PSE",
+"ObirOr5-E3",
+"ObirOr5-E4",
+"ObirOr5-E5",
+"ObirOr5-E6",
+"ObirOr5-E7",
+"ObirOr5-E8",
+"ObirOr5-E9",
+"ObirOr5-F1",
+"ObirOr5-G1",
+"ObirOr5-H1",
+"ObirOr5-H2",
+"ObirOr5-H3",
+"ObirOr5-H4PSE",
+"ObirOr5-H5",
+"ObirOr5-H6PSE",
+"ObirOr5-Hfrag1",
+"ObirOr5-I1",
+"ObirOr5-J1",
+"ObirOr5-J2PSE",
+"ObirOr5-J3",
+"ObirOr5-K1",
+"ObirOr5-K2",
+"ObirOr5-L10",
+"ObirOr5-L11",
+"ObirOr5-L12",
+"ObirOr5-L13",
+"ObirOr5-L14",
+"ObirOr5-L15",
+"ObirOr5-L16",
+"ObirOr5-L17PSE",
+"ObirOr5-L18",
+"ObirOr5-L19PSE",
+"ObirOr5-L1PSE",
+"ObirOr5-L2",
+"ObirOr5-L20",
+"ObirOr5-L21PSE",
+"ObirOr5-L22",
+"ObirOr5-L23",
+"ObirOr5-L24PSE",
+"ObirOr5-L25",
+"ObirOr5-L26",
+"ObirOr5-L27",
+"ObirOr5-L28",
+"ObirOr5-L29",
+"ObirOr5-L3",
+"ObirOr5-L30",
+"ObirOr5-L31",
+"ObirOr5-L32",
+"ObirOr5-L33",
+"ObirOr5-L34",
+"ObirOr5-L35",
+"ObirOr5-L4",
+"ObirOr5-L5",
+"ObirOr5-L6",
+"ObirOr5-L7",
+"ObirOr5-L8",
+"ObirOr5-L9",
+"ObirOr5-M1",
+"ObirOr5-M2",
+"ObirOr5-N1",
+"ObirOr5-N2",
+"ObirOr5-N3",
+"ObirOr5-N4PSE",
+"ObirOr5-O1",
+"ObirOr5-O2",
+"ObirOr5-O3",
+"ObirOr5-Orco",
+"ObirOr5-P1",
+"ObirOr5-P2",
+"ObirOr5-P3PSE",
+"ObirOr5-P4",
+"ObirOr5-P5",
+"ObirOr5-P6",
+"ObirOr5-P7",
+"ObirOr5-Q1",
+"ObirOr5-Q2",
+"ObirOr5-Q3",
+"ObirOr5-R1PSE",
+"ObirOr5-R2",
+"ObirOr5-R3",
+"ObirOr5-R4PSE",
+"ObirOr5-S1PSE",
+"ObirOr5-T1",
+"ObirOr5-T2",
+"ObirOr5-T3",
+"ObirOr5-U1",
+"ObirOr5-U10",
+"ObirOr5-U11",
+"ObirOr5-U12",
+"ObirOr5-U13",
+"ObirOr5-U14",
+"ObirOr5-U15",
+"ObirOr5-U16",
+"ObirOr5-U17",
+"ObirOr5-U18",
+"ObirOr5-U19PSE",
+"ObirOr5-U2",
+"ObirOr5-U20",
+"ObirOr5-U21",
+"ObirOr5-U22",
+"ObirOr5-U23",
+"ObirOr5-U24",
+"ObirOr5-U25",
+"ObirOr5-U26PSE",
+"ObirOr5-U27",
+"ObirOr5-U28",
+"ObirOr5-U29",
+"ObirOr5-U3",
+"ObirOr5-U30PSE",
+"ObirOr5-U31",
+"ObirOr5-U32",
+"ObirOr5-U33",
+"ObirOr5-U34",
+"ObirOr5-U35",
+"ObirOr5-U36",
+"ObirOr5-U37",
+"ObirOr5-U38",
+"ObirOr5-U39",
+"ObirOr5-U4",
+"ObirOr5-U40",
+"ObirOr5-U41PSE",
+"ObirOr5-U42",
+"ObirOr5-U43",
+"ObirOr5-U44",
+"ObirOr5-U45",
+"ObirOr5-U46PSE",
+"ObirOr5-U47",
+"ObirOr5-U48",
+"ObirOr5-U49PSE",
+"ObirOr5-U5",
+"ObirOr5-U50",
+"ObirOr5-U51",
+"ObirOr5-U52",
+"ObirOr5-U53HET",
+"ObirOr5-U54",
+"ObirOr5-U55",
+"ObirOr5-U56",
+"ObirOr5-U57",
+"ObirOr5-U58",
+"ObirOr5-U59",
+"ObirOr5-U6",
+"ObirOr5-U60HET",
+"ObirOr5-U61",
+"ObirOr5-U62",
+"ObirOr5-U63",
+"ObirOr5-U64",
+"ObirOr5-U65",
+"ObirOr5-U67",
+"ObirOr5-U7",
+"ObirOr5-U8",
+"ObirOr5-U9",
+"ObirOr5-Ufrag1",
+"ObirOr5-V1",
+"ObirOr5-V10",
+"ObirOr5-V11",
+"ObirOr5-V12PSE",
+"ObirOr5-V13",
+"ObirOr5-V14",
+"ObirOr5-V15",
+"ObirOr5-V16",
+"ObirOr5-V17",
+"ObirOr5-V18",
+"ObirOr5-V19PSE",
+"ObirOr5-V20PSE",
+"ObirOr5-V21",
+"ObirOr5-V22",
+"ObirOr5-V23",
+"ObirOr5-V24",
+"ObirOr5-V25",
+"ObirOr5-V26",
+"ObirOr5-V27",
+"ObirOr5-V28",
+"ObirOr5-V2PSE",
+"ObirOr5-V3",
+"ObirOr5-V4",
+"ObirOr5-V5",
+"ObirOr5-V6",
+"ObirOr5-V7",
+"ObirOr5-V8",
+"ObirOr5-V9",
+"ObirOr5-W1",
+"ObirOr5-X1",
+"ObirOr5-X2PSE",
+"ObirOr5-X3PSE",
+"ObirOr5-XA1",
+"ObirOr5-Y1",
+"ObirOr5-ZA1")
+
+or_genes <- data.frame(or_genes)
+colnames(or_genes) <- "gene_id"
+str(or_genes)
+or_genes$or_genes <- as.factor(or_genes$gene_id)
+
+
+
+
+
+```
+
