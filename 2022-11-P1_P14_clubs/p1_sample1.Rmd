@@ -193,7 +193,7 @@ p1_sample1_nsyb_subset <- subset(x = p1_sample1_nsyb_df, subset = nsyb_count >= 
 
 ##embryonic lethal abnormal vision
 p1_sample1_elav <- GetAssayData(object = p1_sample1_sctransform,
-                     assay = "RNA", slot = "data")["LOC105280759", ]
+                     assay = "SCT", slot = "counts")["LOC105280759", ]
 p1_sample1_elav_df <- data.frame(p1_sample1_elav)
 p1_sample1_elav_nuclei_id <- rownames(p1_sample1_elav_df)
 rownames(p1_sample1_elav_df) <- NULL
@@ -213,45 +213,45 @@ p1_sample1_brp_subset <- subset(x = p1_sample1_brp_df, subset = brp_count >= 2) 
 
 ##cadherin N
 p1_sample1_cadn <- GetAssayData(object = p1_sample1_sctransform,
-                     assay = "RNA", slot = "data")["LOC105285306", ]
+                     assay = "SCT", slot = "counts")["LOC105285306", ]
 p1_sample1_cadn_df <- data.frame(p1_sample1_cadn)
 p1_sample1_cadn_nuclei_id <- rownames(p1_sample1_cadn_df)
 rownames(p1_sample1_cadn_df) <- NULL
 p1_sample1_cadn_df <- cbind(p1_sample1_cadn_nuclei_id, p1_sample1_cadn_df)
 colnames(p1_sample1_cadn_df) <- c("nuclei_id_cadn", "cadn_count")
-p1_sample1_cadn_subset <- subset(x = p1_sample1_cadn_df, subset = cadn_count >= 2) #8029
+p1_sample1_cadn_subset <- subset(x = p1_sample1_cadn_df, subset = cadn_count >= 2) #8388
 
 ##synaptotagmin
 p1_sample1_syt1 <- GetAssayData(object = p1_sample1_sctransform,
-                     assay = "RNA", slot = "data")["LOC105275115", ]
+                     assay = "SCT", slot = "counts")["LOC105275115", ]
 p1_sample1_syt1_df <- data.frame(p1_sample1_syt1)
 p1_sample1_syt1_nuclei_id <- rownames(p1_sample1_syt1_df)
 rownames(p1_sample1_syt1_df) <- NULL
 p1_sample1_syt1_df <- cbind(p1_sample1_syt1_nuclei_id, p1_sample1_syt1_df)
 colnames(p1_sample1_syt1_df) <- c("nuclei_id_syt1", "syt1_count")
-p1_sample1_syt1_subset <- subset(x = p1_sample1_syt1_df, subset = syt1_count >= 2) #5920
+p1_sample1_syt1_subset <- subset(x = p1_sample1_syt1_df, subset = syt1_count >= 2) #6278
 
 ##glial marker
 #reverse polarity
 p1_sample1_repo <- GetAssayData(object = p1_sample1_sctransform,
-                     assay = "RNA", slot = "data")["LOC105286785", ]
+                     assay = "SCT", slot = "counts")["LOC105286785", ]
 p1_sample1_repo_df <- data.frame(p1_sample1_repo)
 p1_sample1_repo_nuclei_id <- rownames(p1_sample1_repo_df)
 rownames(p1_sample1_repo_df) <- NULL
 p1_sample1_repo_df <- cbind(p1_sample1_repo_nuclei_id, p1_sample1_repo_df)
 colnames(p1_sample1_repo_df) <- c("nuclei_id_repo", "repo_count")
-p1_sample1_repo_subset <- subset(x = p1_sample1_repo_df, subset = repo_count >= 2) ##107
+p1_sample1_repo_subset <- subset(x = p1_sample1_repo_df, subset = repo_count >= 2) ##110
 
 
 ##marker for maturing OSNs (uncharacterized)
 p1_sample1_maturing_osn <- GetAssayData(object = p1_sample1_sctransform,
-                     assay = "RNA", slot = "data")["LOC105283685", ]
+                     assay = "SCT", slot = "counts")["LOC105283685", ]
 p1_sample1_maturing_osn_df <- data.frame(p1_sample1_maturing_osn)
 p1_sample1_maturing_osn_nuclei_id <- rownames(p1_sample1_maturing_osn_df)
 rownames(p1_sample1_maturing_osn_df) <- NULL
 p1_sample1_maturing_osn_df <- cbind(p1_sample1_maturing_osn_nuclei_id, p1_sample1_maturing_osn_df)
 colnames(p1_sample1_maturing_osn_df) <- c("nuclei_id_maturing_osn", "maturing_osn_count")
-p1_sample1_maturing_osn_subset <- subset(x = p1_sample1_maturing_osn_df, subset = maturing_osn_count >= 2) ##1788
+p1_sample1_maturing_osn_subset <- subset(x = p1_sample1_maturing_osn_df, subset = maturing_osn_count >= 2) ##1727
 
 
 ##get nuclei expressing at least two neuronal markers (corrected UMI count >= 2) 
@@ -322,7 +322,7 @@ colnames(p1_sample1_neuronal_uniq_ids) <- "p1_sample1_neuronal_uniq_ids" ##7786 
 ##subset the normalized seurat object for the barcodes with at least two neuronal markers
 p1_sample1_normalize_neuron_ids <- subset(x = p1_sample1_sctransform,
                                   cells = p1_sample1_neuronal_uniq_ids$p1_sample1_neuronal_uniq_ids)
-length(colnames(p1_sample1_normalize_neuron_ids))##7786 nuclei
+length(colnames(p1_sample1_normalize_neuron_ids))##8067 nuclei
 length(rownames(p1_sample1_normalize_neuron_ids)) ##12510 genes
 
 #find the highly variable genes in this subset
@@ -432,11 +432,11 @@ p1_sample1_or_per_cell_t <- data.frame(t(p1_sample1_or_per_cell))
 # rownames(p1_sample1_or_per_cell_t) <- NULL
 # or_per_nucleus_t$nuclei_barcodes <- as.factor(nuclei_barcodes)
 
-length(p1_sample1_or_per_cell_t$ObirOr5.9E1) ##this should be 7786 (# of neuronal cells)
+length(p1_sample1_or_per_cell_t$ObirOr5.9E1) ##this should be 8067 (# of neuronal cells)
 #this number is off because gene_id is added as a row at the end while transposing
 #remove the last row i.e., row # 6656 here
-p1_sample1_or_per_cell_t <- p1_sample1_or_per_cell_t[-7787, ]
-length(p1_sample1_or_per_cell_t$`ObirOr5.9E1`) ##now this is 7786
+p1_sample1_or_per_cell_t <- p1_sample1_or_per_cell_t[-8068, ]
+length(p1_sample1_or_per_cell_t$`ObirOr5.9E1`) ##now this is 8067
 
 # colnames(p1_sample1_or_per_cell_t) <- p1_sample1_or_per_cell$gene_id
 p1_sample1_cell_barcodes <- rownames(p1_sample1_or_per_cell_t)
@@ -448,12 +448,12 @@ gene_id_orco_cells <- data.frame(as.factor(rownames(p1_sample1_orco_t)))
 colnames(gene_id_orco_cells) <- "gene_id_orco_cells"
 rownames(p1_sample1_orco_t) <- NULL
 
-write.table(x = p1_sample1_orco_t, file = "results/p1_sample1_orco_cells.csv",
-            sep = ",", row.names = FALSE)
-write.table(x = gene_id_orco_cells, file = "results/p1_sample1_gene_id_orco_cells.csv",
-            sep = ",", row.names = FALSE)
+# write.table(x = p1_sample1_orco_t, file = "results/p1_sample1_orco_cells.csv",
+#             sep = ",", row.names = FALSE)
+# write.table(x = gene_id_orco_cells, file = "results/p1_sample1_gene_id_orco_cells.csv",
+#             sep = ",", row.names = FALSE)
 
-p1_sample1_orco_t$gene_id <- gene_id_orco_cells$gene_id_orco_cells
+# p1_sample1_orco_t$gene_id <- gene_id_orco_cells$gene_id_orco_cells
 
 # p1_sample1_uncharc <- subset(x = p1_sample1_osn_gene_exp_per_cell_t, subset = ObirOr5.Orco >= 2)
 
