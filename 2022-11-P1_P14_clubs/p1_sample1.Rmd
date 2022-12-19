@@ -33,30 +33,30 @@ for (package in (.packages())) {
 
 ```{r}
 #import cellranger count matrix data
-p1_sample1 <- Read10X(data.dir = "input/P1_sample1/filtered_feature_bc_matrix/")
+p1_sample1 <- Read10X(data.dir = "~/../../Volumes/antqueen/booster/AB20221109_snRNASeq_P1_P14_clubs/count_P1_sample1/outs/filtered_feature_bc_matrix/")
 
-#check the data
-##Useful link: https://broadinstitute.github.io/KrumlovSingleCellWorkshop2020/data-wrangling-scrnaseq-1.html
-
-p1_sample1[1:10, 1:3]
-dim(p1_sample1) ## 14238 genes and 10950 cells
-
-#summary counts for genes and cells
-p1_sample1_counts_per_cell <- Matrix::colSums(p1_sample1)
-cat("p1_sample1_counts_per_cell: ", p1_sample1_counts_per_cell[1:5], "\n") ##counts for the first 5 cells
-length(p1_sample1_counts_per_cell) 
-
-p1_sample1_counts_per_gene <- Matrix::rowSums(p1_sample1)
-cat("p1_sample1_counts_per_gene: ", p1_sample1_counts_per_gene[1:5], "\n") ##counts for the first 5 genes
-
-p1_sample1_genes_per_cell <- Matrix::colSums(p1_sample1 > 0) ##count gene only if it has non-zero reads mapped
-cat("counts for non-zero genes: ", p1_sample1_genes_per_cell[1:5])  ## counts for first 5 genes
-
-hist(log(p1_sample1_counts_per_cell), main = "counts per cell", col = "wheat")
-hist(log(p1_sample1_genes_per_cell), main = "genes per cell", col = "wheat")
-
-plot(p1_sample1_counts_per_cell, p1_sample1_genes_per_cell, log = "xy", col = "wheat")
-title("counts vs genes per cell")
+# #check the data
+# ##Useful link: https://broadinstitute.github.io/KrumlovSingleCellWorkshop2020/data-wrangling-scrnaseq-1.html
+# 
+# p1_sample1[1:10, 1:3]
+# dim(p1_sample1) ## 14238 genes and 10950 cells
+# 
+# #summary counts for genes and cells
+# p1_sample1_counts_per_cell <- Matrix::colSums(p1_sample1)
+# cat("p1_sample1_counts_per_cell: ", p1_sample1_counts_per_cell[1:5], "\n") ##counts for the first 5 cells
+# length(p1_sample1_counts_per_cell) 
+# 
+# p1_sample1_counts_per_gene <- Matrix::rowSums(p1_sample1)
+# cat("p1_sample1_counts_per_gene: ", p1_sample1_counts_per_gene[1:5], "\n") ##counts for the first 5 genes
+# 
+# p1_sample1_genes_per_cell <- Matrix::colSums(p1_sample1 > 0) ##count gene only if it has non-zero reads mapped
+# cat("counts for non-zero genes: ", p1_sample1_genes_per_cell[1:5])  ## counts for first 5 genes
+# 
+# hist(log(p1_sample1_counts_per_cell), main = "counts per cell", col = "wheat")
+# hist(log(p1_sample1_genes_per_cell), main = "genes per cell", col = "wheat")
+# 
+# plot(p1_sample1_counts_per_cell, p1_sample1_genes_per_cell, log = "xy", col = "wheat")
+# title("counts vs genes per cell")
 
 # Initialize the Seurat object with the raw (non-normalized data)
 p1_sample1_seurat <- CreateSeuratObject(counts = p1_sample1, project = "p1_sample1_antennal_clubs",
@@ -109,39 +109,43 @@ p1_sample1_seurat <- subset(x = p1_sample1_seurat,
                            subset = nFeature_RNA > 200 &
                              nFeature_RNA < 4000)
 
-##normalize data
-p1_sample1_normalize <- NormalizeData(object = p1_sample1_seurat,
-                                     normalization.method = "LogNormalize",
-                                     scale.factor = 10000)
-#identifying highly variable feautures
-p1_sample1_subset_vf <- FindVariableFeatures(object = p1_sample1_normalize,
-                                     selection.method = "vst",
-                                     nfeatures = 4000)
-# Identify the 10 most highly variable genes
-p1_sample1_vf_top10 <- head(VariableFeatures(object = p1_sample1_subset_vf), 10)
-p1_sample1_vf_top10
+# ##normalize data
+# p1_sample1_normalize <- NormalizeData(object = p1_sample1_seurat,
+#                                      normalization.method = "LogNormalize",
+#                                      scale.factor = 10000)
+# #identifying highly variable feautures
+# p1_sample1_subset_vf <- FindVariableFeatures(object = p1_sample1_normalize,
+#                                      selection.method = "vst",
+#                                      nfeatures = 4000)
+# # Identify the 10 most highly variable genes
+# p1_sample1_vf_top10 <- head(VariableFeatures(object = p1_sample1_subset_vf), 10)
+# p1_sample1_vf_top10
+# 
+# # plot variable features with and without labels
+# plot1_sample1_vf <- VariableFeaturePlot(object = p1_sample1_subset_vf)
+# plot2_sample1_vf <- LabelPoints(plot = plot1_sample1_vf,
+#                         points = p1_sample1_vf_top10)
+# plot1_sample1_vf + plot2_sample1_vf
 
-# plot variable features with and without labels
-plot1_sample1_vf <- VariableFeaturePlot(object = p1_sample1_subset_vf)
-plot2_sample1_vf <- LabelPoints(plot = plot1_sample1_vf,
-                        points = p1_sample1_vf_top10)
-plot1_sample1_vf + plot2_sample1_vf
+# #scaling the data : linear transformation
+# ##The results of this are stored in pbmc[["RNA"]]@scale.data
+# p1_sample1_all_genes <- rownames(p1_sample1_subset_vf)
+# p1_sample1_subset_vf_scale <- ScaleData(object = p1_sample1_subset_vf,
+#                                 features = p1_sample1_all_genes)
+# p1_sample1_subset_vf_scale
+
+##use SCTransform instead of normalize data and scale data workflow
+p1_sample1_sctransform <- SCTransform(object = p1_sample1_seurat)
 
 ##plot normalized gene counts
-log_normal_gene_count <- as.vector(x = p1_sample1_subset_vf[['RNA']]@data)
-log_normal_gene_count <- log_normal_gene_count[log_normal_gene_count != 0]
-hist(log_normal_gene_count)
-
-#scaling the data : linear transformation
-##The results of this are stored in pbmc[["RNA"]]@scale.data
-p1_sample1_all_genes <- rownames(p1_sample1_subset_vf)
-p1_sample1_subset_vf_scale <- ScaleData(object = p1_sample1_subset_vf,
-                                features = p1_sample1_all_genes)
-p1_sample1_subset_vf_scale
+p1_sample1_normalized_gene_count <- as.vector(x = p1_sample1_sctransform[["SCT"]]@counts)
+p1_sample1_normalized_gene_count <- p1_sample1_normalized_gene_count[p1_sample1_normalized_gene_count != 0]
+hist(p1_sample1_normalized_gene_count)
 
 ##perform linear dimensional reduction
-p1_sample1_scale_pca <- RunPCA(object = p1_sample1_subset_vf_scale,
-                               features = VariableFeatures(object = p1_sample1_subset_vf_scale))
+p1_sample1_scale_pca <- RunPCA(object = p1_sample1_sctransform,
+                               features = VariableFeatures(object = p1_sample1_sctransform))
+
 
 
 # Examine and visualize PCA results a few different ways
@@ -161,6 +165,9 @@ p1_sample1_scale <- FindClusters(object = p1_sample1_scale, resolution = 0.5)
 ##run UMAP/tSNE
 p1_sample1_scale <- RunTSNE(object = p1_sample1_scale, dims = 1:10)
 DimPlot(object = p1_sample1_scale, reduction = "tsne")
+VlnPlot(p1_sample1_scale, features = c("ObirOr5-Orco", "LOC105283685"))
+VlnPlot(p1_sample1_scale, features = c("ObirOr5-Orco", "LOC105284919"))
+
 
 
 ```
@@ -171,8 +178,8 @@ DimPlot(object = p1_sample1_scale, reduction = "tsne")
 ##neuronal markers
 
 #synaptobrevin
-p1_sample1_nsyb <- GetAssayData(object = p1_sample1_normalize,
-                     assay = "RNA", slot = "data")["LOC105284919", ]
+p1_sample1_nsyb <- GetAssayData(object = p1_sample1_sctransform,
+                     assay = "SCT", slot = "counts")["LOC105284919", ]
 head(p1_sample1_nsyb, 10)
 
 #here nuclei identities are rownames; convert that into a column
@@ -182,60 +189,72 @@ rownames(p1_sample1_nsyb_df) <- NULL
 
 p1_sample1_nsyb_df <- cbind(p1_sample1_nsyb_nuclei_id, p1_sample1_nsyb_df)
 colnames(p1_sample1_nsyb_df) <- c("nuclei_id_nsyb", "nsyb_count")
-p1_sample1_nsyb_subset <- subset(x = p1_sample1_nsyb_df, subset = nsyb_count > 2)
+p1_sample1_nsyb_subset <- subset(x = p1_sample1_nsyb_df, subset = nsyb_count >= 2) ##891
 
 ##embryonic lethal abnormal vision
-p1_sample1_elav <- GetAssayData(object = p1_sample1_normalize,
+p1_sample1_elav <- GetAssayData(object = p1_sample1_sctransform,
                      assay = "RNA", slot = "data")["LOC105280759", ]
 p1_sample1_elav_df <- data.frame(p1_sample1_elav)
 p1_sample1_elav_nuclei_id <- rownames(p1_sample1_elav_df)
 rownames(p1_sample1_elav_df) <- NULL
 p1_sample1_elav_df <- cbind(p1_sample1_elav_nuclei_id, p1_sample1_elav_df)
 colnames(p1_sample1_elav_df) <- c("nuclei_id_elav", "elav_count")
-p1_sample1_elav_subset <- subset(x = p1_sample1_elav_df, subset = elav_count > 2)
+p1_sample1_elav_subset <- subset(x = p1_sample1_elav_df, subset = elav_count >= 2) #4418
 
 ##brunchpilot
-p1_sample1_brp <- GetAssayData(object = p1_sample1_normalize,
-                     assay = "RNA", slot = "data")["LOC105276401", ]
+p1_sample1_brp <- GetAssayData(object = p1_sample1_sctransform,
+                     assay = "SCT", slot = "counts")["LOC105276401", ]
 p1_sample1_brp_df <- data.frame(p1_sample1_brp)
 p1_sample1_brp_nuclei_id <- rownames(p1_sample1_brp_df)
 rownames(p1_sample1_brp_df) <- NULL
 p1_sample1_brp_df <- cbind(p1_sample1_brp_nuclei_id, p1_sample1_brp_df)
 colnames(p1_sample1_brp_df) <- c("nuclei_id_brp", "brp_count")
-p1_sample1_brp_subset <- subset(x = p1_sample1_brp_df, subset = brp_count > 2)
+p1_sample1_brp_subset <- subset(x = p1_sample1_brp_df, subset = brp_count >= 2) #7539
 
 ##cadherin N
-p1_sample1_cadn <- GetAssayData(object = p1_sample1_normalize,
+p1_sample1_cadn <- GetAssayData(object = p1_sample1_sctransform,
                      assay = "RNA", slot = "data")["LOC105285306", ]
 p1_sample1_cadn_df <- data.frame(p1_sample1_cadn)
 p1_sample1_cadn_nuclei_id <- rownames(p1_sample1_cadn_df)
 rownames(p1_sample1_cadn_df) <- NULL
 p1_sample1_cadn_df <- cbind(p1_sample1_cadn_nuclei_id, p1_sample1_cadn_df)
 colnames(p1_sample1_cadn_df) <- c("nuclei_id_cadn", "cadn_count")
-p1_sample1_cadn_subset <- subset(x = p1_sample1_cadn_df, subset = cadn_count > 2)
+p1_sample1_cadn_subset <- subset(x = p1_sample1_cadn_df, subset = cadn_count >= 2) #8029
 
 ##synaptotagmin
-p1_sample1_syt1 <- GetAssayData(object = p1_sample1_normalize,
+p1_sample1_syt1 <- GetAssayData(object = p1_sample1_sctransform,
                      assay = "RNA", slot = "data")["LOC105275115", ]
 p1_sample1_syt1_df <- data.frame(p1_sample1_syt1)
 p1_sample1_syt1_nuclei_id <- rownames(p1_sample1_syt1_df)
 rownames(p1_sample1_syt1_df) <- NULL
 p1_sample1_syt1_df <- cbind(p1_sample1_syt1_nuclei_id, p1_sample1_syt1_df)
 colnames(p1_sample1_syt1_df) <- c("nuclei_id_syt1", "syt1_count")
-p1_sample1_syt1_subset <- subset(x = p1_sample1_syt1_df, subset = syt1_count > 2)
+p1_sample1_syt1_subset <- subset(x = p1_sample1_syt1_df, subset = syt1_count >= 2) #5920
 
 ##glial marker
 #reverse polarity
-p1_sample1_repo <- GetAssayData(object = p1_sample1_normalize,
+p1_sample1_repo <- GetAssayData(object = p1_sample1_sctransform,
                      assay = "RNA", slot = "data")["LOC105286785", ]
 p1_sample1_repo_df <- data.frame(p1_sample1_repo)
 p1_sample1_repo_nuclei_id <- rownames(p1_sample1_repo_df)
 rownames(p1_sample1_repo_df) <- NULL
 p1_sample1_repo_df <- cbind(p1_sample1_repo_nuclei_id, p1_sample1_repo_df)
 colnames(p1_sample1_repo_df) <- c("nuclei_id_repo", "repo_count")
-p1_sample1_repo_subset <- subset(x = p1_sample1_repo_df, subset = repo_count > 2) ##49
+p1_sample1_repo_subset <- subset(x = p1_sample1_repo_df, subset = repo_count >= 2) ##107
 
-##get nuclei expressing at least two neuronal markers (expression level > 2) 
+
+##marker for maturing OSNs (uncharacterized)
+p1_sample1_maturing_osn <- GetAssayData(object = p1_sample1_sctransform,
+                     assay = "RNA", slot = "data")["LOC105283685", ]
+p1_sample1_maturing_osn_df <- data.frame(p1_sample1_maturing_osn)
+p1_sample1_maturing_osn_nuclei_id <- rownames(p1_sample1_maturing_osn_df)
+rownames(p1_sample1_maturing_osn_df) <- NULL
+p1_sample1_maturing_osn_df <- cbind(p1_sample1_maturing_osn_nuclei_id, p1_sample1_maturing_osn_df)
+colnames(p1_sample1_maturing_osn_df) <- c("nuclei_id_maturing_osn", "maturing_osn_count")
+p1_sample1_maturing_osn_subset <- subset(x = p1_sample1_maturing_osn_df, subset = maturing_osn_count >= 2) ##1788
+
+
+##get nuclei expressing at least two neuronal markers (corrected UMI count >= 2) 
 
 ##nsyb and elav
 p1_sample1_nsyb_elav <- data.frame(intersect(p1_sample1_nsyb_subset$nuclei_id_nsyb,
@@ -298,13 +317,13 @@ p1_sample1_neuronal_uniq_ids <- data.frame(unique(c(p1_sample1_nsyb_elav$p1_samp
                                                     p1_sample1_brp_cadn$p1_sample1_brp_cadn_nuclei_ids,
                                                     p1_sample1_brp_syt1$p1_sample1_brp_syt1_nuclei_ids,
                                                     p1_sample1_cadn_syt1$p1_sample1_cadn_syt1_nuclei_ids)))
-colnames(p1_sample1_neuronal_uniq_ids) <- "p1_sample1_neuronal_uniq_ids" ##6655 nuclei
+colnames(p1_sample1_neuronal_uniq_ids) <- "p1_sample1_neuronal_uniq_ids" ##7786 nuclei
 
 ##subset the normalized seurat object for the barcodes with at least two neuronal markers
-p1_sample1_normalize_neuron_ids <- subset(x = p1_sample1_normalize,
+p1_sample1_normalize_neuron_ids <- subset(x = p1_sample1_sctransform,
                                   cells = p1_sample1_neuronal_uniq_ids$p1_sample1_neuronal_uniq_ids)
-length(colnames(p1_sample1_normalize_neuron_ids))##6655 nuclei
-length(rownames(p1_sample1_normalize_neuron_ids)) ##12813 (what does this number represent?)
+length(colnames(p1_sample1_normalize_neuron_ids))##7786 nuclei
+length(rownames(p1_sample1_normalize_neuron_ids)) ##12510 genes
 
 #find the highly variable genes in this subset
 p1_sample1_normalize_neuron_ids <- FindVariableFeatures(object = p1_sample1_normalize_neuron_ids,
@@ -318,10 +337,16 @@ p1_sample1_plot2 <- LabelPoints(plot = p1_sample1_plot1, points = p1_sample1_top
 p1_sample1_plot1 + p1_sample1_plot2
 p1_sample1_top20_neuron_genes
 
-##scaling the data
-p1_sample1_all_genes_neurons <- rownames(p1_sample1_normalize_neuron_ids)
-p1_sample1_normalize_neuron_ids <- ScaleData(object = p1_sample1_normalize_neuron_ids,
-                                     features = p1_sample1_all_genes_neurons)
+# ##scaling the data
+# p1_sample1_all_genes_neurons <- rownames(p1_sample1_normalize_neuron_ids)
+# 
+# ##added vars.to.regress from Herre et al, 2022
+# p1_sample1_normalize_neuron_ids <- ScaleData(object = p1_sample1_normalize_neuron_ids,
+#                                      features = p1_sample1_all_genes_neurons,
+#                                      vars.to.regress = c("nCount_RNA"))
+
+##no need to scale as we have already done sctransform
+
 p1_sample1_normalize_neuron_ids <- RunPCA(object = p1_sample1_normalize_neuron_ids,
                              features = VariableFeatures(object = p1_sample1_normalize_neuron_ids))
 DimHeatmap(p1_sample1_normalize_neuron_ids, dims = 1:15, cells = 500, balanced = TRUE)
@@ -341,6 +366,11 @@ FeaturePlot(object = p1_sample1_normalize_neuron_ids,
 ##Orco and repo (glial cell marker)
 FeaturePlot(object = p1_sample1_normalize_neuron_ids,
             features = c("ObirOr5-Orco", "LOC105286785"))
+
+##Orco and repo and LOC105283685
+FeaturePlot(object = p1_sample1_normalize_neuron_ids,
+            features = c("ObirOr5-Orco", "LOC105286785", "LOC105283685"))
+
 
 #cluster markers
 #find markers
@@ -363,23 +393,38 @@ head(p1_sample1_cluster1_markers, n = 10)
 # ##remove the non-Or genes that are still showing up as factor levels in the df
 # p1_sample1_or_per_nucleus <- droplevels(p1_sample1_or_per_nucleus)
 
-gene_exp_per_cell <- data.frame(p1_sample1_normalize_neuron_ids@assays[["RNA"]]@data)
-p1_sample1_gene_id <- rownames(gene_exp_per_cell)
+##assay set to be SCT due to SCTransform
+##counts represents corrected UMI counts that is used for Herre et al 2022
+p1_sample1_osn_gene_exp_per_cell <- data.frame(p1_sample1_normalize_neuron_ids@assays[["SCT"]]@counts)
 
-gene_exp_per_cell$gene_id <- p1_sample1_gene_id
-rownames(gene_exp_per_cell) <- NULL
-gene_exp_per_cell$gene_id <- as.factor(gene_exp_per_cell$gene_id)
+p1_sample1_gene_id <- rownames(p1_sample1_osn_gene_exp_per_cell)
 
-p1_sample1_or_per_cell <- subset(x = gene_exp_per_cell,
-                         subset = gene_id == list(or_genes))
-p1_sample1_or_per_cell <- merge(x = gene_exp_per_cell, y = or_genes)
+p1_sample1_osn_gene_exp_per_cell$gene_id <- p1_sample1_gene_id
+rownames(p1_sample1_osn_gene_exp_per_cell) <- NULL
+p1_sample1_osn_gene_exp_per_cell$gene_id <- as.factor(p1_sample1_osn_gene_exp_per_cell$gene_id)
+# rownames(p1_sample1_osn_gene_exp_per_cell) <- p1_sample1_osn_gene_exp_per_cell$gene_id
+# p1_sample1_osn_gene_exp_per_cell <- select(p1_sample1_osn_gene_exp_per_cell, -gene_id)
+
+##transpose the df
+p1_sample1_osn_gene_exp_per_cell_t <- t(p1_sample1_osn_gene_exp_per_cell)
+
+# p1_sample1_or_per_cell <- subset(x = p1_sample1_osn_gene_exp_per_cell,
+#                          subset = gene_id == list(or_genes))
+p1_sample1_or_per_cell <- merge(x = p1_sample1_osn_gene_exp_per_cell, y = or_genes)
 ##remove the non-Or genes that are still showing up as factor levels in the df
 p1_sample1_or_per_cell <- droplevels(p1_sample1_or_per_cell)
 rownames(p1_sample1_or_per_cell) <- p1_sample1_or_per_cell$gene_id
 p1_sample1_or_per_cell <- select(p1_sample1_or_per_cell, -gene_id)
 
+# or_uncharc <- data.frame(as.factor(c("ObirOr5-Orco", "LOC105283685")))
+# colnames(or_uncharc) <- "gene_id"
+# 
+# p1_sample1_or_uncharc <- merge(x = p1_sample1_osn_gene_exp_per_cell, y = or_uncharc)
 
-##calculate number of ORs per nuclei with lognorm exp > 2
+
+
+
+##calculate number of ORs per nuclei with UMI count >= 2
 
 #transpose the data such that gene ids are now the columns
 p1_sample1_or_per_cell_t <- data.frame(t(p1_sample1_or_per_cell))
@@ -387,17 +432,30 @@ p1_sample1_or_per_cell_t <- data.frame(t(p1_sample1_or_per_cell))
 # rownames(p1_sample1_or_per_cell_t) <- NULL
 # or_per_nucleus_t$nuclei_barcodes <- as.factor(nuclei_barcodes)
 
-length(p1_sample1_or_per_cell_t$ObirOr5.9E1) ##this should be 6655 (# of neuronal cells)
+length(p1_sample1_or_per_cell_t$ObirOr5.9E1) ##this should be 7786 (# of neuronal cells)
 #this number is off because gene_id is added as a row at the end while transposing
 #remove the last row i.e., row # 6656 here
-p1_sample1_or_per_cell_t <- p1_sample1_or_per_cell_t[-6656, ]
-length(p1_sample1_or_per_cell_t$`ObirOr5.9E1`) ##now this is 6655
+p1_sample1_or_per_cell_t <- p1_sample1_or_per_cell_t[-7787, ]
+length(p1_sample1_or_per_cell_t$`ObirOr5.9E1`) ##now this is 7786
 
 # colnames(p1_sample1_or_per_cell_t) <- p1_sample1_or_per_cell$gene_id
 p1_sample1_cell_barcodes <- rownames(p1_sample1_or_per_cell_t)
 
-# ##get cells with Orco expression > 2
+# ##get cells with Orco expression >= 2
 p1_sample1_orco <- subset(x = p1_sample1_or_per_cell_t, subset = ObirOr5.Orco >= 2)
+p1_sample1_orco_t <- t(p1_sample1_orco)
+gene_id_orco_cells <- data.frame(as.factor(rownames(p1_sample1_orco_t)))
+colnames(gene_id_orco_cells) <- "gene_id_orco_cells"
+rownames(p1_sample1_orco_t) <- NULL
+
+write.table(x = p1_sample1_orco_t, file = "results/p1_sample1_orco_cells.csv",
+            sep = ",", row.names = FALSE)
+write.table(x = gene_id_orco_cells, file = "results/p1_sample1_gene_id_orco_cells.csv",
+            sep = ",", row.names = FALSE)
+
+p1_sample1_orco_t$gene_id <- gene_id_orco_cells$gene_id_orco_cells
+
+# p1_sample1_uncharc <- subset(x = p1_sample1_osn_gene_exp_per_cell_t, subset = ObirOr5.Orco >= 2)
 
 ##create a vector with unique cell barcodes (there shouldn't be duplication though)
 ##confirmed that there is no duplication
@@ -431,8 +489,8 @@ for (position in seq_len(length(p1_sample1_cell_barcode_vec))) {
   
 } 
 
-##true column in this table represents number of ORs with lognormal expression > 2
-# #save table
+#true column in this table represents number of ORs with lognormal expression > 2
+#save table
 # write.table(x = p1_sample1_result_df, file = "results/p1_sample1_or_per_cell.csv",
 #             sep = ",", quote = FALSE, row.names = FALSE)
 
@@ -455,16 +513,16 @@ str(p1_sample1_result_df)
 p1_sample1_result_df$true_or <- as.numeric(p1_sample1_result_df$true_or)
 
 ##subset the nuclei for which there is 1 OR with read count > 1
-p1_sample1_only_one_or <- subset(x = p1_sample1_result_df, subset = true_or == 1) ##7
+p1_sample1_only_one_or <- subset(x = p1_sample1_result_df, subset = true_or == 1) ##143
 
 ##subset the nuclei for which there are more than 1 ORs with read count > 1
-p1_sample1_more_than_one_or <- subset(x = p1_sample1_result_df, subset = true_or > 1)
+p1_sample1_more_than_one_or <- subset(x = p1_sample1_result_df, subset = true_or > 1) #281
 
 #subset the nuclei for which there are more than or = 2 and less than 4 ORs with read count > 1
 p1_sample1_more_than_two_ors <- subset(x = p1_sample1_result_df, subset = true_or >= 2 &
-                              true_or < 4) #21
+                              true_or < 4) #118
 #subset for more than 4 ORs
-p1_sample1_more_than_four_ors <- subset(x = p1_sample1_result_df, subset = true_or >= 4) ##192
+p1_sample1_more_than_four_ors <- subset(x = p1_sample1_result_df, subset = true_or >= 4) ##163
 
 #subset for nuclei with no ORs with read count > 1
 p1_sample1_no_or <- subset(x = p1_sample1_result_df, subset = true_or == 0) ##1
