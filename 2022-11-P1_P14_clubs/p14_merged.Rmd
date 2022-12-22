@@ -96,39 +96,47 @@ plot1
 p14_merged <- subset(x = p14_merged,
                            subset = nFeature_RNA > 200 &
                              nFeature_RNA < 3000)
-##normalize data
-p14_merged_normalize <- NormalizeData(object = p14_merged,
-                                     normalization.method = "LogNormalize",
-                                     scale.factor = 10000)
-#identifying highly variable feautures
-p14_merged_subset_vf <- FindVariableFeatures(object = p14_merged_normalize,
-                                     selection.method = "vst",
-                                     nfeatures = 3000)
-# Identify the 10 most highly variable genes
-p14_merged_vf_top10 <- head(VariableFeatures(object = p14_merged_subset_vf), 10)
-p14_merged_vf_top10
+# ##normalize data
+# p14_merged_normalize <- NormalizeData(object = p14_merged,
+#                                      normalization.method = "LogNormalize",
+#                                      scale.factor = 10000)
+# #identifying highly variable feautures
+# p14_merged_subset_vf <- FindVariableFeatures(object = p14_merged_normalize,
+#                                      selection.method = "vst",
+#                                      nfeatures = 3000)
+# # Identify the 10 most highly variable genes
+# p14_merged_vf_top10 <- head(VariableFeatures(object = p14_merged_subset_vf), 10)
+# p14_merged_vf_top10
+# 
+# # plot variable features with and without labels
+# plot1_merged_vf <- VariableFeaturePlot(object = p14_merged_subset_vf)
+# plot2_merged_vf <- LabelPoints(plot = plot1_merged_vf,
+#                         points = p14_merged_vf_top10)
+# plot1_merged_vf + plot2_merged_vf
+# 
+# ##plot normalized gene counts
+# log_normal_gene_count <- as.vector(x = p14_merged_subset_vf[['RNA']]@data)
+# log_normal_gene_count <- log_normal_gene_count[log_normal_gene_count != 0]
+# log_normal_gene_count_df <- data.frame(log_normal_gene_count)
+# hist(log_normal_gene_count)
+# #scaling the data : linear transformation
+# ##The results of this are stored in pbmc[["RNA"]]@scale.data
+# p14_merged_all_genes <- rownames(p14_merged_subset_vf)
+# p14_merged_subset_vf_scale <- ScaleData(object = p14_merged_subset_vf,
+#                                 features = p14_merged_all_genes)
+# p14_merged_subset_vf_scale
 
-# plot variable features with and without labels
-plot1_merged_vf <- VariableFeaturePlot(object = p14_merged_subset_vf)
-plot2_merged_vf <- LabelPoints(plot = plot1_merged_vf,
-                        points = p14_merged_vf_top10)
-plot1_merged_vf + plot2_merged_vf
+##USE SCTransform instead of normalization and scaling
+p14_merged_sctransform <- SCTransform(object = p14_merged)
 
 ##plot normalized gene counts
-log_normal_gene_count <- as.vector(x = p14_merged_subset_vf[['RNA']]@data)
-log_normal_gene_count <- log_normal_gene_count[log_normal_gene_count != 0]
-log_normal_gene_count_df <- data.frame(log_normal_gene_count)
-hist(log_normal_gene_count)
-#scaling the data : linear transformation
-##The results of this are stored in pbmc[["RNA"]]@scale.data
-p14_merged_all_genes <- rownames(p14_merged_subset_vf)
-p14_merged_subset_vf_scale <- ScaleData(object = p14_merged_subset_vf,
-                                features = p14_merged_all_genes)
-p14_merged_subset_vf_scale
+p14_merged_normalized_gene_count <- as.vector(x = p14_merged_sctransform[["SCT"]]@counts)
+p14_merged_normalized_gene_count <- p14_merged_normalized_gene_count[p14_merged_normalized_gene_count != 0]
+hist(p14_merged_normalized_gene_count)
 
 ##perform linear dimensional reduction
-p14_merged_scale_pca <- RunPCA(object = p14_merged_subset_vf_scale,
-                               features = VariableFeatures(object = p14_merged_subset_vf_scale))
+p14_merged_scale_pca <- RunPCA(object = p14_merged_sctransform,
+                               features = VariableFeatures(object = p14_merged_sctransform))
 
 # Examine and visualize PCA results a few different ways
 print(p14_merged_scale_pca[["pca"]], dims = 1:5, nfeatures = 5)
@@ -154,8 +162,8 @@ DimPlot(object = p14_merged_scale, reduction = "tsne")
 ##get nuclei expressing specific genes
 ##neuronal markers
 #synaptobrevin
-p14_merged_nsyb <- GetAssayData(object = p14_merged_normalize,
-                     assay = "RNA", slot = "data")["LOC105284919", ]
+p14_merged_nsyb <- GetAssayData(object = p14_merged_sctransform,
+                     assay = "SCT", slot = "counts")["LOC105284916", ]
 head(p14_merged_nsyb, 10)
 tail(p14_merged_nsyb, 10)
 
@@ -165,60 +173,80 @@ p14_merged_nsyb_nuclei_id <- rownames(p14_merged_nsyb_df)
 rownames(p14_merged_nsyb_df) <- NULL
 p14_merged_nsyb_df <- cbind(p14_merged_nsyb_nuclei_id, p14_merged_nsyb_df)
 colnames(p14_merged_nsyb_df) <- c("nuclei_id_nsyb", "nsyb_count")
-p14_merged_nsyb_subset <- subset(x = p14_merged_nsyb_df, subset = nsyb_count > 2) ##1334
+p14_merged_nsyb_subset <- subset(x = p14_merged_nsyb_df, subset = nsyb_count >= 2) ##16380
 
 ##embryonic lethal abnormal vision
-p14_merged_elav <- GetAssayData(object = p14_merged_normalize,
-                     assay = "RNA", slot = "data")["LOC105280759", ]
+p14_merged_elav <- GetAssayData(object = p14_merged_sctransform,
+                     assay = "SCT", slot = "counts")["LOC105280759", ]
 p14_merged_elav_df <- data.frame(p14_merged_elav)
 p14_merged_elav_nuclei_id <- rownames(p14_merged_elav_df)
 rownames(p14_merged_elav_df) <- NULL
 p14_merged_elav_df <- cbind(p14_merged_elav_nuclei_id, p14_merged_elav_df)
 colnames(p14_merged_elav_df) <- c("nuclei_id_elav", "elav_count")
-p14_merged_elav_subset <- subset(x = p14_merged_elav_df, subset = elav_count > 2) ##1304
+p14_merged_nsyb_subset <- subset(x = p14_merged_elav_df, subset = elav_count >= 2) ##1847
 
 ##brunchpilot
-p14_merged_brp <- GetAssayData(object = p14_merged_normalize,
-                     assay = "RNA", slot = "data")["LOC105276401", ]
+p14_merged_brp <- GetAssayData(object = p14_merged_sctransform,
+                     assay = "SCT", slot = "counts")["LOC105276401", ]
 p14_merged_brp_df <- data.frame(p14_merged_brp)
 p14_merged_brp_nuclei_id <- rownames(p14_merged_brp_df)
 rownames(p14_merged_brp_df) <- NULL
 p14_merged_brp_df <- cbind(p14_merged_brp_nuclei_id, p14_merged_brp_df)
 colnames(p14_merged_brp_df) <- c("nuclei_id_brp", "brp_count")
-p14_merged_brp_subset <- subset(x = p14_merged_brp_df, subset = brp_count > 2) ##23903
+p14_merged_brp_subset <- subset(x = p14_merged_brp_df, subset = brp_count >= 2) ##24498
 
 ##cadherin N
-p14_merged_cadn <- GetAssayData(object = p14_merged_normalize,
-                     assay = "RNA", slot = "data")["LOC105285306", ]
+p14_merged_cadn <- GetAssayData(object = p14_merged_sctransform,
+                     assay = "SCT", slot = "counts")["LOC105285306", ]
 p14_merged_cadn_df <- data.frame(p14_merged_cadn)
 p14_merged_cadn_nuclei_id <- rownames(p14_merged_cadn_df)
 rownames(p14_merged_cadn_df) <- NULL
 p14_merged_cadn_df <- cbind(p14_merged_cadn_nuclei_id, p14_merged_cadn_df)
 colnames(p14_merged_cadn_df) <- c("nuclei_id_cadn", "cadn_count")
-p14_merged_cadn_subset <- subset(x = p14_merged_cadn_df, subset = cadn_count > 2) ##18404
+p14_merged_cadn_subset <- subset(x = p14_merged_cadn_df, subset = cadn_count >= 2) ##19691
 
 ##synaptotagmin
-p14_merged_syt1 <- GetAssayData(object = p14_merged_normalize,
-                     assay = "RNA", slot = "data")["LOC105275115", ]
+p14_merged_syt1 <- GetAssayData(object = p14_merged_sctransform,
+                     assay = "SCT", slot = "counts")["LOC105275115", ]
 p14_merged_syt1_df <- data.frame(p14_merged_syt1)
 p14_merged_syt1_nuclei_id <- rownames(p14_merged_syt1_df)
 rownames(p14_merged_syt1_df) <- NULL
 p14_merged_syt1_df <- cbind(p14_merged_syt1_nuclei_id, p14_merged_syt1_df)
 colnames(p14_merged_syt1_df) <- c("nuclei_id_syt1", "syt1_count")
-p14_merged_syt1_subset <- subset(x = p14_merged_syt1_df, subset = syt1_count > 2) ##15195
+p14_merged_syt1_subset <- subset(x = p14_merged_syt1_df, subset = syt1_count >= 2) ##17008
 
 ##glial marker
 #reverse polarity
-p14_merged_repo <- GetAssayData(object = p14_merged_normalize,
-                     assay = "RNA", slot = "data")["LOC105286785", ]
+p14_merged_repo <- GetAssayData(object = p14_merged_sctransform,
+                     assay = "SCT", slot = "counts")["LOC105286785", ]
 p14_merged_repo_df <- data.frame(p14_merged_repo)
 p14_merged_repo_nuclei_id <- rownames(p14_merged_repo_df)
 rownames(p14_merged_repo_df) <- NULL
 p14_merged_repo_df <- cbind(p14_merged_repo_nuclei_id, p14_merged_repo_df)
 colnames(p14_merged_repo_df) <- c("nuclei_id_repo", "repo_count")
-p14_merged_repo_subset <- subset(x = p14_merged_repo_df, subset = repo_count > 2) ##487
+p14_merged_repo_subset <- subset(x = p14_merged_repo_df, subset = repo_count >= 2) ##540
 
-##get nuclei expressing at least two neuronal markers (expression level > 2) 
+##marker for maturing OSNs (uncharacterized)
+p14_merged_maturing_osn <- GetAssayData(object = p14_merged_sctransform,
+                     assay = "SCT", slot = "counts")["LOC105283685", ]
+p14_merged_maturing_osn_df <- data.frame(p14_merged_maturing_osn)
+p14_merged_maturing_osn_nuclei_id <- rownames(p14_merged_maturing_osn_df)
+rownames(p14_merged_maturing_osn_df) <- NULL
+p14_merged_maturing_osn_df <- cbind(p14_merged_maturing_osn_nuclei_id, p14_merged_maturing_osn_df)
+colnames(p14_merged_maturing_osn_df) <- c("nuclei_id_maturing_osn", "maturing_osn_count")
+p14_merged_maturing_osn_subset <- subset(x = p14_merged_maturing_osn_df, subset = maturing_osn_count >= 2) ##1610
+
+##antennal marker (pebbled)
+p14_merged_peb <- GetAssayData(object = p14_merged_sctransform,
+                     assay = "SCT", slot = "counts")["LOC105282968", ]
+p14_merged_peb_df <- data.frame(p14_merged_peb)
+p14_merged_peb_nuclei_id <- rownames(p14_merged_peb_df)
+rownames(p14_merged_peb_df) <- NULL
+p14_merged_peb_df <- cbind(p14_merged_peb_nuclei_id, p14_merged_peb_df)
+colnames(p14_merged_peb_df) <- c("nuclei_id_peb", "peb_count")
+p14_merged_peb_subset <- subset(x = p14_merged_peb_df, subset = peb_count >= 2) ##4061
+
+##get nuclei expressing at least two neuronal markers (expression level >= 2) 
 ##nsyb and elav
 p14_merged_nsyb_elav <- data.frame(intersect(p14_merged_nsyb_subset$nuclei_id_nsyb,
                                              p14_merged_elav_subset$nuclei_id_elav))
@@ -270,44 +298,49 @@ p14_merged_neuronal_uniq_ids <- data.frame(unique(c(p14_merged_nsyb_elav$p14_mer
                                                     p14_merged_brp_cadn$p14_merged_brp_cadn_nuclei_ids,
                                                     p14_merged_brp_syt1$p14_merged_brp_syt1_nuclei_ids,
                                                     p14_merged_cadn_syt1$p14_merged_cadn_syt1_nuclei_ids)))
-colnames(p14_merged_neuronal_uniq_ids) <- "p14_merged_neuronal_uniq_ids" ##21672 nuclei
+colnames(p14_merged_neuronal_uniq_ids) <- "p14_merged_neuronal_uniq_ids" ##22785 nuclei
 
 ##subset the normalized seurat object for the barcodes with at least two neuronal markers
-p14_merged_normalize_neuron_ids <- subset(x = p14_merged_normalize,
+p14_merged_normalize_neuron_ids <- subset(x = p14_merged_sctransform,
                                   cells = p14_merged_neuronal_uniq_ids$p14_merged_neuronal_uniq_ids)
-length(colnames(p14_merged_normalize_neuron_ids))##21672 nuclei
-length(rownames(p14_merged_normalize_neuron_ids)) ##14238 genes
+length(colnames(p14_merged_normalize_neuron_ids))##22785 nuclei
+length(rownames(p14_merged_normalize_neuron_ids)) ##12837 genes
 
-#find the highly variable genes in this subset
-p14_merged_normalize_neuron_ids <- FindVariableFeatures(object = p14_merged_normalize_neuron_ids,
-                                  selection.method = "vst",
-                                  nfeatures = 3000)
-#identify the top most variable genes
-p14_merged_top20_neuron_genes <- head(VariableFeatures(object = p14_merged_normalize_neuron_ids), 20)
-p14_merged_plot1 <- VariableFeaturePlot(p14_merged_normalize_neuron_ids)
-p14_merged_plot2 <- LabelPoints(plot = p14_merged_plot1, points = p14_merged_top20_neuron_genes,
-                                repel = TRUE)
-p14_merged_plot1 + p14_merged_plot2
-p14_merged_top20_neuron_genes
+# #find the highly variable genes in this subset
+# p14_merged_normalize_neuron_ids <- FindVariableFeatures(object = p14_merged_normalize_neuron_ids,
+#                                   selection.method = "vst",
+#                                   nfeatures = 3000)
+# #identify the top most variable genes
+# p14_merged_top20_neuron_genes <- head(VariableFeatures(object = p14_merged_normalize_neuron_ids), 20)
+# p14_merged_plot1 <- VariableFeaturePlot(p14_merged_normalize_neuron_ids)
+# p14_merged_plot2 <- LabelPoints(plot = p14_merged_plot1, points = p14_merged_top20_neuron_genes,
+#                                 repel = TRUE)
+# p14_merged_plot1 + p14_merged_plot2
+# p14_merged_top20_neuron_genes
 
-##scaling the data
-p14_merged_all_genes_neurons <- rownames(p14_merged_normalize_neuron_ids)
-##added vars.to.regress from Herre et al, 2022
-p14_merged_normalize_neuron_ids <- ScaleData(object = p14_merged_normalize_neuron_ids,
-                                     features = p14_merged_all_genes_neurons,
-                                     vars.to.regress = c("nCount_RNA"))
-p14_merged_normalize_neuron_ids <- RunPCA(object = p14_merged_normalize_neuron_ids,
-                             features = VariableFeatures(object = p14_merged_normalize_neuron_ids))
-DimHeatmap(p14_merged_normalize_neuron_ids, dims = 1:15, cells = 500, balanced = TRUE)
+# ##scaling the data
+# p14_merged_all_genes_neurons <- rownames(p14_merged_normalize_neuron_ids)
+# ##added vars.to.regress from Herre et al, 2022
+# p14_merged_normalize_neuron_ids <- ScaleData(object = p14_merged_normalize_neuron_ids,
+#                                      features = p14_merged_all_genes_neurons,
+#                                      vars.to.regress = c("nCount_RNA"))
+
+####scale data using sctransform
+p14_merged_all_neuronal_genes <- SCTransform(object = p14_merged_normalize_neuron_ids)
+
+p14_merged_normalize_scale_pca <- RunPCA(object = p14_merged_all_neuronal_genes,
+                             features = VariableFeatures(object = p14_merged_all_neuronal_genes))
+DimHeatmap(p14_merged_normalize_scale_pca, dims = 1:15, cells = 500, balanced = TRUE)
 
 ##cluster the nuclei
-p14_merged_normalize_neuron_ids <- FindNeighbors(object = p14_merged_normalize_neuron_ids,
+p14_merged_normalize_scale <- FindNeighbors(object = p14_merged_normalize_scale_pca,
                                          dims = 1:10)
-p14_merged_normalize_neuron_ids <- FindClusters(object = p14_merged_normalize_neuron_ids,
+p14_merged_normalize_scale <- FindClusters(object = p14_merged_normalize_scale,
                                         resolution = 0.5)
-p14_merged_normalize_neuron_ids <- RunTSNE(object = p14_merged_normalize_neuron_ids,
+p14_merged_normalize_neuron_ids <- RunTSNE(object = p14_merged_normalize_scale,
                                    dims = 1:10)
 DimPlot(object = p14_merged_normalize_neuron_ids, reduction = "tsne")
+
 FeaturePlot(object = p14_merged_normalize_neuron_ids,
             features = c("ObirOr5-Orco"))
 ##Orco and repo (glial cell marker)
@@ -328,16 +361,20 @@ p14_merged_cluster1_markers <- FindMarkers(object = p14_merged_normalize_neuron_
                                 min.pct = 0.25)
 head(p14_merged_cluster1_markers, n = 10)
 
+##assay set to be SCT due to SCTransform
+##counts represents corrected UMI counts that is used for Herre et al 2022
 ##gene expression per cell
-gene_exp_per_cell <- data.frame(p14_merged_normalize_neuron_ids@assays[["RNA"]]@data)
-p14_merged_gene_id <- rownames(gene_exp_per_cell)
-gene_exp_per_cell$gene_id <- p14_merged_gene_id
-rownames(gene_exp_per_cell) <- NULL
-gene_exp_per_cell$gene_id <- as.factor(gene_exp_per_cell$gene_id)
-p14_merged_or_per_cell <- gene_exp_per_cell[gene_exp_per_cell$gene_id %in% or_genes$or_genes, ]
+p14_merged_osn_gene_exp_per_cell <- data.frame(p14_merged_normalize_neuron_ids@assays[["SCT"]]@counts)
+p14_merged_gene_id <- rownames(p14_merged_osn_gene_exp_per_cell)
+p14_merged_osn_gene_exp_per_cell$gene_id <- p14_merged_gene_id
+rownames(p14_merged_osn_gene_exp_per_cell) <- NULL
+p14_merged_osn_gene_exp_per_cell$gene_id <- as.factor(p14_merged_osn_gene_exp_per_cell$gene_id)
 
-p14_merged_or_per_cell$gene_id <- rownames(p14_merged_or_per_cell)
-rownames(p14_merged_or_per_cell)
+##subset the ORs
+p14_merged_or_per_cell <- p14_merged_osn_gene_exp_per_cell[p14_merged_osn_gene_exp_per_cell$gene_id %in% or_genes$or_genes, ]
+
+# p14_merged_or_per_cell$gene_id <- rownames(p14_merged_or_per_cell)
+# rownames(p14_merged_or_per_cell)
 # write.table(x = gene_exp_per_cell, file = "results/p14_merged_gene_expression_per_cell.csv",
 #             sep = ",", row.names = FALSE)
 
@@ -346,7 +383,7 @@ p14_merged_or_per_cell <- droplevels(p14_merged_or_per_cell)
 rownames(p14_merged_or_per_cell) <- p14_merged_or_per_cell$gene_id
 p14_merged_or_per_cell <- select(p14_merged_or_per_cell, -gene_id)
 
-##calculate number of ORs per nuclei with lognorm exp > 2
+##calculate number of ORs per nuclei with corrected UMI counts >= 2
 #transpose the data such that gene ids are now the columns
 p14_merged_or_per_cell_t <- data.frame(t(p14_merged_or_per_cell))
 
@@ -354,17 +391,26 @@ p14_merged_or_per_cell_t <- data.frame(t(p14_merged_or_per_cell))
 # rownames(p14_merged_or_per_cell_t) <- NULL
 # or_per_nucleus_t$nuclei_barcodes <- as.factor(nuclei_barcodes)
 
-length(p14_merged_or_per_cell_t$ObirOr5.9E1) ##this should be 21672 (# of neuronal cells)
-#this number is off because gene_id is added as a row at the end while transposing
+length(p14_merged_or_per_cell_t$ObirOr5.9E1) ##this should be 22785 (# of neuronal cells)
+
 p14_merged_cell_barcodes <- rownames(p14_merged_or_per_cell_t)
 
-# ##get cells with Orco expression > 2
+# ##get cells with Orco expression >= 1
 p14_merged_orco <- subset(x = p14_merged_or_per_cell_t, subset = ObirOr5.Orco >= 1)
+p14_merged_orco_t <- t(p14_merged_orco)
+gene_id_orco_cells <- data.frame(as.factor(rownames(p14_merged_orco_t)))
+colnames(gene_id_orco_cells) <- "gene_id_orco_cells"
+rownames(p14_merged_orco_t) <- NULL
+# write.table(x = p14_merged_orco_t, file = "results/p14_merged_orco_cells.csv",
+#             sep = ",", row.names = FALSE)
+# write.table(x = gene_id_orco_cells, file = "results/p14_merged_gene_id_orco_cells.csv",
+#             sep = ",", row.names = FALSE)
+
 
 ##create a vector with unique cell barcodes (there shouldn't be duplication though)
 ##confirmed that there is no duplication
 p14_merged_cell_barcode_vec <- unique(rownames(p14_merged_orco))
-length(p14_merged_cell_barcode_vec)  #566 nuclei
+length(p14_merged_cell_barcode_vec)  #4003 nuclei
 
 #create empty dataframe
 p14_merged_result_df <- as.data.frame(matrix(ncol = 3,
@@ -375,8 +421,8 @@ p14_merged_result_df$cell_barcode <- p14_merged_cell_barcode_vec
 for (position in seq_len(length(p14_merged_cell_barcode_vec))) {
   print(position)
   cell_barcode <-  p14_merged_cell_barcode_vec[position]
-  ###only select those ORs with lognorm >2 for a particular cell
-  p14_merged_table <- data.frame(table(p14_merged_or_per_cell_t[cell_barcode, ] > 2 )) 
+  ###only select those ORs with lognorm >1 for a particular cell
+  p14_merged_table <- data.frame(table(p14_merged_or_per_cell_t[cell_barcode, ] > 1 )) 
   p14_merged_table_t <- data.frame(t(p14_merged_table))
   
   if (colnames(p14_merged_table_t) == "t.p14_merged_table.") {
@@ -393,7 +439,7 @@ for (position in seq_len(length(p14_merged_cell_barcode_vec))) {
   
 } 
 
-#true column in this table represents number of ORs with lognormal expression > 2
+#true column in this table represents number of ORs with lognormal expression > 1
 #save table
 write.table(x = p14_merged_result_df, file = "results/p14_merged_or_per_cell.csv",
             sep = ",", quote = FALSE, row.names = FALSE)
@@ -414,25 +460,27 @@ p14_merged_result_df$true_or <- gsub(pattern = " ", replacement = "",
 str(p14_merged_result_df)
 p14_merged_result_df$true_or <- as.numeric(p14_merged_result_df$true_or)
 
-##subset the nuclei for which there is 1 OR with read count > 2
-p14_merged_only_one_or <- subset(x = p14_merged_result_df, subset = true_or == 1) ##26
+##subset the nuclei for which there is 1 OR with read count > 1
+p14_merged_only_one_or <- subset(x = p14_merged_result_df, subset = true_or == 1) ##565
 
 ##subset the nuclei for which there are more than 1 ORs with read count > 1
-p14_merged_more_than_one_or <- subset(x = p14_merged_result_df, subset = true_or > 1) ##540
+p14_merged_more_than_one_or <- subset(x = p14_merged_result_df, subset = true_or > 1) ##3226
 
 #subset the nuclei for which there are more than or = 2 and less than 4 ORs with read count > 1
-p14_merged_more_than_two_ors <- subset(x = p14_merged_result_df, subset = true_or >= 2 &
-                              true_or < 4) #143
+# p14_merged_more_than_two_ors <- subset(x = p14_merged_result_df, subset = true_or >= 2 &
+#                               true_or < 4) #4
 #subset for more than 4 ORs
-p14_merged_more_than_four_ors <- subset(x = p14_merged_result_df, subset = true_or >= 4) ##397
+p14_merged_more_than_four_ors <- subset(x = p14_merged_result_df, subset = true_or >= 4) ##2137
 
 #subset for nuclei with no ORs with read count > 1
-p14_merged_no_or <- subset(x = p14_merged_result_df, subset = true_or == 0) ##0
+p14_merged_no_or <- subset(x = p14_merged_result_df, subset = true_or == 0) ##212
+
+max(p14_merged_result_df$true_or)
 
 #make a freq distribution
 p14_merged_categories <- c("no_OR", "only_one_OR",
-                "two_or_less_than_four", "four_or_more_ORs")
-p14_merged_values <- c(0, 26, 143, 397)
+                "more_than_one_OR", "four_or_more_ORs")
+p14_merged_values <- c(212, 565, 3226, 2137)
 p14_merged_hist_df <- data.frame(p14_merged_categories, p14_merged_values)
 p14_merged_hist_df_t <- data.frame(t(p14_merged_hist_df))
 barplot((p14_merged_hist_df$p14_merged_values))
@@ -444,10 +492,97 @@ barplot_p14_merged <- ggplot(data = barplot_df, aes(x = name, y = value)) +
   ylab("Frequency") +
   theme(axis.text.x = element_text(angle = 90))
 
-##nuclei with both Orco and Ir25a.2 co-expression
-# ##get cells with Orco expression > 2
-p14_merged_ir25a <- subset(x = p14_merged_or_per_cell_t, subset = ObirIr25a.2 >= 1)
+# ##nuclei with both Orco and Ir25a.2 co-expression
+# # ##get cells with Orco expression > 2
+# p14_merged_ir25a <- subset(x = p14_merged_or_per_cell_t, subset = ObirIr25a.2 > 1)
 
+##subset the normalized seurat object for the barcodes with orco expression
+p14_merged_or_cell_barcodes <- data.frame(as.factor(rownames(p14_merged_orco)))
+colnames(p14_merged_or_cell_barcodes) <- "orco_cell_id"
+p14_merged_or_cell_barcodes <- gsub(".", "-", p14_merged_or_cell_barcodes$orco_cell_id, fixed = TRUE)
+p14_merged_or_cell_barcodes <- data.frame(p14_merged_or_cell_barcodes)
+colnames(p14_merged_or_cell_barcodes) <- "orco_cell_id"
+p14_merged_normalized_or_cell_ids <- subset(x = p14_merged_sctransform,
+                                  cells = p14_merged_or_cell_barcodes$orco_cell_id)
+
+##PCA
+p14_merged_normalized_or_cell_ids <- RunPCA(object = p14_merged_normalized_or_cell_ids,
+                             features = VariableFeatures(object = p14_merged_normalized_or_cell_ids))
+##cluster the nuclei
+p14_merged_normalized_or_cell_ids <- FindNeighbors(object = p14_merged_normalized_or_cell_ids,
+                                         dims = 1:10)
+p14_merged_normalized_or_cell_ids <- FindClusters(object = p14_merged_normalized_or_cell_ids,
+                                        resolution = 0.5)
+p14_merged_normalized_or_cell_ids <- RunTSNE(object = p14_merged_normalized_or_cell_ids,
+                                   dims = 1:10)
+DimPlot(object = p14_merged_normalized_or_cell_ids, reduction = "tsne")
+
+#cluster markers
+#find markers
+#cluster 0
+p14_merged_or_cluster0_markers <- FindMarkers(object = p14_merged_normalized_or_cell_ids, ident.1 = 0,
+                                min.pct = 0.25)
+head(p14_merged_or_cluster0_markers, n = 20)
+
+##cluster1
+p14_merged_or_cluster1_markers <- FindMarkers(object = p14_merged_normalized_or_cell_ids, ident.1 = 1,
+                                min.pct = 0.25)
+head(p14_merged_or_cluster1_markers, n = 20)
+
+#cluster2
+p14_merged_or_cluster2_markers <- FindMarkers(object = p14_merged_normalized_or_cell_ids, ident.1 = 2,
+                                min.pct = 0.25)
+head(p14_merged_or_cluster2_markers, n = 30)
+
+#cluster3
+p14_merged_or_cluster3_markers <- FindMarkers(object = p14_merged_normalized_or_cell_ids, ident.1 = 3,
+                                min.pct = 0.25)
+head(p14_merged_or_cluster3_markers, n = 30)
+
+#cluster4
+p14_merged_or_cluster4_markers <- FindMarkers(object = p14_merged_normalized_or_cell_ids, ident.1 = 4,
+                                min.pct = 0.25)
+head(p14_merged_or_cluster4_markers, n = 20)
+
+#cluster5
+p14_merged_or_cluster5_markers <- FindMarkers(object = p14_merged_normalized_or_cell_ids, ident.1 = 5,
+                                min.pct = 0.25)
+head(p14_merged_or_cluster5_markers, n = 20)
+
+#cluster6
+p14_merged_or_cluster6_markers <- FindMarkers(object = p14_merged_normalized_or_cell_ids, ident.1 = 6,
+                                min.pct = 0.25)
+head(p14_merged_or_cluster6_markers, n = 20)
+
+#cluster7
+p14_merged_or_cluster7_markers <- FindMarkers(object = p14_merged_normalized_or_cell_ids, ident.1 = 7,
+                                min.pct = 0.25)
+head(p14_merged_or_cluster7_markers, n = 20)
+
+#cluster8
+p14_merged_or_cluster8_markers <- FindMarkers(object = p14_merged_normalized_or_cell_ids, ident.1 = 8,
+                                min.pct = 0.25)
+head(p14_merged_or_cluster8_markers, n = 20)
+
+#cluster9
+p14_merged_or_cluster9_markers <- FindMarkers(object = p14_merged_normalized_or_cell_ids, ident.1 = 9,
+                                min.pct = 0.25)
+head(p14_merged_or_cluster9_markers, n = 20)
+
+#cluster10
+p14_merged_or_cluster10_markers <- FindMarkers(object = p14_merged_normalized_or_cell_ids, ident.1 = 10,
+                                min.pct = 0.25)
+head(p14_merged_or_cluster10_markers, n = 20)
+
+##cluster11
+p14_merged_or_cluster11_markers <- FindMarkers(object = p14_merged_normalized_or_cell_ids, ident.1 = 11,
+                                min.pct = 0.25)
+head(p14_merged_or_cluster11_markers, n = 20)
+
+#cluster 12
+p14_merged_or_cluster12_markers <- FindMarkers(object = p14_merged_normalized_or_cell_ids, ident.1 = 12,
+                                min.pct = 0.25)
+head(p14_merged_or_cluster12_markers, n = 20)
 
 
 ```
